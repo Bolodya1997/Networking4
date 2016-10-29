@@ -1,64 +1,106 @@
 package ru.nsu.fit.bolodya.chat;
 
+import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.util.UUID;
 
 class Protocol {
     static final int MAX_PACKET = 1024 * 1024;
 
-    static final byte CONNECT       = 0x01;
-    static final byte ACCEPT        = 0x02;
-    static final byte MESSAGE       = 0x03;
-    static final byte DISCONNECT    = 0x04;
-    static final byte ERR_TYPE      = 0x00;
+    static final byte CONNECT       = 0b0001;
+    static final byte MESSAGE       = 0b0010;
+    static final byte DISCONNECT    = 0b0100;
+    static final byte ACCEPT        = 0b1000;    //  sets as flag
+    static final byte ERR_TYPE      = 0b0000;
 
-    static final long ERR_ID = -1;
+    static final UUID ERR_ID = null;
 
     static final long MAX_MESSAGE_LIFE = 5000;
 
-    static byte[] connectMessage(long id) {
-        return ByteBuffer.allocate(1 + Long.BYTES)
-                .put(CONNECT)
-                .putLong(id)
-                .array();
-    }
+    private static int TYPE_LENGTH = 1;
+    private static int ID_LENGTH = 2 + Long.BYTES;  //  sizeof UUID
+    private static int META_LENGTH = TYPE_LENGTH + ID_LENGTH;
 
-    static byte[] packMessage(long id, byte[] data) {
-        ByteBuffer buffer = ByteBuffer.allocate(1 + Long.BYTES + data.length);
-        buffer.put(MESSAGE);
-        buffer.putLong(id);
-        buffer.put(data);
+    static final int ACCEPT_LENGTH = TYPE_LENGTH + ID_LENGTH;
+
+    private static byte[] message(byte type, UUID id, byte[] data) {
+        int dataLength = (data == null) ? 0 : data.length;
+        ByteBuffer buffer = ByteBuffer.allocate(TYPE_LENGTH + ID_LENGTH + dataLength)
+                .put(type)
+                .putLong(id.getMostSignificantBits())
+                .putLong(id.getLeastSignificantBits());
+        if (dataLength > 0)
+            buffer.put(data);
 
         return buffer.array();
     }
 
-    private static int TYPE_LENGTH = 1;
-    private static int ID_LENGTH = Long.BYTES;
-    private static int PARENT_LENGTH = 2 * Integer.BYTES;
+    static byte[] connectMessage(UUID id) {
+        return message(CONNECT, id, null);
+    }
+
+    static byte[] acceptMessage(byte type, UUID id) {
+        return message((byte) (type | ACCEPT), id, null);
+    }
+
+    static byte[] disconnectMessage(UUID id, InetSocketAddress socket) {
+        byte[] address = socket.getAddress().getAddress();
+        byte[] data = ByteBuffer.allocate(address.length + Integer.BYTES)
+                .put(address)
+                .putInt(socket.getPort())
+                .array();
+
+        return message(DISCONNECT, id, data);
+    }
+
+    static byte[] packMessage(UUID id, byte[] data) {
+        return message(MESSAGE, id, data);
+    }
 
     static byte getType(byte[] data) {
         if (data.length < TYPE_LENGTH || data[0] > DISCONNECT)
             return ERR_TYPE;
+
         return data[0];
     }
 
-    static long getID(byte[] data) {
+    static UUID getID(byte[] data) {
         if (data.length < TYPE_LENGTH + ID_LENGTH)
             return ERR_ID;
-        return ByteBuffer.wrap(data, 1, Long.BYTES).getLong();
+
+        ByteBuffer buffer = ByteBuffer.wrap(data, TYPE_LENGTH, ID_LENGTH);
+        long most = buffer.getLong();
+        long least = buffer.getLong();
+
+        return new UUID(most, least);
     }
 
-    static SocketAddress getParent(byte[] data) throws UnknownHostException {
+    static String getMessage(byte[] data) {
+        int length = data.length - META_LENGTH;
+
+        byte[] tmp = new byte[length];
+        ((ByteBuffer) ByteBuffer.wrap(data).position(META_LENGTH)).get(tmp);
+
+        String result = null;
+        try {
+            result = new String(tmp, "UTF8");
+        }
+        catch (UnsupportedEncodingException ignored) {}
+
+        return result;
+    }
+
+    static InetSocketAddress getParent(byte[] data) {
         if (getType(data) != DISCONNECT)
             return null;
 
         try {
-            ByteBuffer buffer = ByteBuffer.wrap(data, TYPE_LENGTH + ID_LENGTH, PARENT_LENGTH);
+            ByteBuffer buffer = (ByteBuffer) ByteBuffer.wrap(data).position(META_LENGTH);
 
-            byte[] tmp = new byte[Integer.BYTES];
+            int addressLength = buffer.getInt();
+            byte[] tmp = new byte[addressLength];
             buffer.get(tmp);
             InetAddress address = InetAddress.getByAddress(tmp);
 

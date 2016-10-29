@@ -1,16 +1,17 @@
 package ru.nsu.fit.bolodya.chat;
 
 import java.util.Map;
+import java.util.UUID;
 
 class Accepter {
 
-    private Map<Long, Message> messages;
+    private Map<UUID, Message> messages;
 
-    Accepter(Map<Long, Message> messages) {
+    Accepter(Map<UUID, Message> messages) {
         this.messages = messages;
     }
 
-    void accept(long id, Connection connection) {
+    void accept(UUID id, Connection connection) {
         Message message = messages.get(id);
 
         if (message == null || connection == null)

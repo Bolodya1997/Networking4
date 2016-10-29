@@ -3,10 +3,10 @@ package ru.nsu.fit.bolodya.chat;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.*;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.UUID;
 
 import static ru.nsu.fit.bolodya.chat.Protocol.*;
 
@@ -14,15 +14,12 @@ public class Node {
 
     private DatagramSocket socket;
 
-    private Map<Long, Message> messages = new HashMap<>();
-    private Map<SocketAddress, Connection> neighbours = new HashMap<>();
+    private Map<UUID, Message> messages = new HashMap<>();
+    private Map<InetSocketAddress, Connection> neighbours = new HashMap<>();
 
     private Connector connector;
     private Accepter accepter;
     private Messenger messenger;
-    private Disconnector disconnector;
-
-    private long id;
 
     static {
         try {
@@ -34,28 +31,27 @@ public class Node {
         }
     }
 
-    public Node(String hostName, int port) throws SocketException, UnknownHostException {
-        socket = new DatagramSocket(port);
+    private Node(int myPort, String hostName, int port) throws SocketException, UnknownHostException {
+        socket = new DatagramSocket(myPort);
         socket.setSoTimeout(100);
 
-        InetSocketAddress address = new InetSocketAddress(InetAddress.getByName(hostName), port);
-
-        ByteBuffer tmp = (ByteBuffer) ByteBuffer.allocate(Long.BYTES)
-                .put(address.getAddress().getAddress())
-                .putInt(port)
-                .position(0);
-        id = tmp.getLong();
-
         Connection[] parent = new Connection[1];
-        parent[0] = new Connection(socket, address);
-        neighbours.put(address, parent[0]);
 
-        messages.put(id, new Message(connectMessage(id), parent[0]).send());
+        if (hostName != null) {
+            InetSocketAddress address = new InetSocketAddress(InetAddress.getByName(hostName), port);
 
-        connector = new Connector(socket, messages.values(), neighbours);
+            parent[0] = new Connection(socket, address);
+            neighbours.put(address, parent[0]);
+
+            UUID id = nextID();
+            messages.put(id, new Message(connectMessage(id), parent[0]).send());
+        } else {
+            parent[0] = null;
+        }
+
+        connector = new Connector(socket, messages.values(), neighbours, parent);
         accepter = new Accepter(messages);
         messenger = new Messenger(messages, neighbours.values(), this::printMessage);
-        disconnector = new Disconnector(neighbours, parent);
 
         mainLoop();
     }
@@ -79,18 +75,22 @@ public class Node {
             if (getType(data) == ERR_TYPE || getID(data) == ERR_ID)
                 continue;
 
+            if (getType(data) != CONNECT && !neighbours.containsKey(receivePacket.getSocketAddress()))
+                continue;
+
             switch (getType(data)) {
                 case CONNECT:
-                    connector.connect(receivePacket.getSocketAddress());
+                    connector.connect(getID(data), (InetSocketAddress) receivePacket.getSocketAddress());
                     break;
                 case ACCEPT:
-                    accepter.accept(getID(data), neighbours.get(receivePacket.getSocketAddress()));
+                    accepter.accept(getID(data),
+                            neighbours.get(receivePacket.getSocketAddress()));
                     break;
                 case MESSAGE:
                     messenger.message(data, neighbours.get(receivePacket.getSocketAddress()));
                     break;
                 case DISCONNECT:
-                    disconnector.disconnect(data, neighbours.get(receivePacket.getSocketAddress()));
+                    connector.disconnect(data, (InetSocketAddress) receivePacket.getSocketAddress());
                     break;
             }
         }
@@ -106,11 +106,11 @@ public class Node {
         }
     }
 
-    private long nextID() {
-        return ++id;
+    private UUID nextID() {
+        return UUID.randomUUID();
     }
 
     private void printMessage(byte[] data) {
-
+        System.out.printf("%s:  %s\n", getID(data), getMessage(data));
     }
 }
