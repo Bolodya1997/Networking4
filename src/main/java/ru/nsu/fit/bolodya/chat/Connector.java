@@ -29,16 +29,16 @@ class Connector {
         this.parent = parent;
     }
 
-    void acceptConnect(Accepter accepter, UUID id, InetSocketAddress address) {
+    void receiveAcceptConnect(Accepter accepter, UUID id, InetSocketAddress address) {
         if (!parent[0].getAddress().equals(address))
             return;
 
         if (parentDisconnecting) {
-            oldParent.accept(DISCONNECT, oldParentDisconnectId);
+            oldParent.sendAccept(DISCONNECT, oldParentDisconnectId);
             parentDisconnecting = false;
         }
 
-        accepter.accept(id, neighbours.get(address));
+        accepter.receiveAccept(id, neighbours.get(address));
     }
 
     void receiveConnect(UUID id, InetSocketAddress address) {
@@ -50,7 +50,7 @@ class Connector {
                 message.addConnection(connection);
         }
 
-        neighbours.get(address).accept(CONNECT, id);
+        neighbours.get(address).sendAccept(CONNECT, id);
     }
 
     void receiveDisconnect(byte[] data, InetSocketAddress address) {
@@ -65,17 +65,17 @@ class Connector {
             neighbours.put(parentAddress, parent[0]);
         }
         else {
-            neighbours.get(address).accept(DISCONNECT, getID(data));
+            neighbours.get(address).sendAccept(DISCONNECT, getID(data));
             neighbours.remove(address);
         }
     }
 
-    void acceptDisconnect(Accepter accepter, UUID id, InetSocketAddress address) {
+    void receiveAcceptDisconnect(Accepter accepter, UUID id, InetSocketAddress address) {
         Connection connection = neighbours.get(address);
         if (connection == null)
             connection = new Connection(socket, address);
 
-        accepter.accept(id, connection);
+        accepter.receiveAccept(id, connection);
         neighbours.remove(address);
     }
 
@@ -88,5 +88,10 @@ class Connector {
 
         for (Message message : messages)
             message.removeConnection(connection);
+    }
+
+    void removeParent() {
+        if (parent[0] != null)
+            neighbours.remove(parent[0].getAddress());
     }
 }

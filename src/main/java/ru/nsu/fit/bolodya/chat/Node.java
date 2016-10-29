@@ -57,6 +57,12 @@ public class Node {
         accepter = new Accepter(messages);
         messenger = new Messenger(messages, neighbours.values(), this::printMessage);
 
+        Disconnector disconnector = new Disconnector(socket,
+                messages, neighbours,
+                connector, accepter, messenger,
+                this::packetReceived, this::packetSpecial, this::printMessage);
+        Runtime.getRuntime().addShutdownHook(new Thread(disconnector::routine));
+
         mainLoop();
     }
 
@@ -90,9 +96,9 @@ public class Node {
 
             if (isAccept(data)) {
                 if (getType(data) == CONNECT)
-                    connector.acceptConnect(accepter, id, address);
+                    connector.receiveAcceptConnect(accepter, id, address);
                 else
-                    accepter.accept(id, neighbours.get(address));
+                    accepter.receiveAccept(id, neighbours.get(address));
 
                 continue;
             }
@@ -135,7 +141,7 @@ public class Node {
         }
 
         if (getType(data) == DISCONNECT && isAccept(data)) {
-            connector.acceptDisconnect(accepter, id, address);
+            connector.receiveAcceptDisconnect(accepter, id, address);
             return true;
         }
 

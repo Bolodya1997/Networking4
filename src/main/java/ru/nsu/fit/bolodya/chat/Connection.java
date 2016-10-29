@@ -28,7 +28,7 @@ class Connection {
         }
     }
 
-    void accept(byte type, UUID id) {
+    void sendAccept(byte type, UUID id) {
         try {
             socket.send(new DatagramPacket(acceptMessage(type, id), ACCEPT_LENGTH, address));
         }

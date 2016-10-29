@@ -4,6 +4,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.UUID;
 
 class Protocol {
@@ -19,7 +20,7 @@ class Protocol {
     private static final byte ERR_TYPE = 0;
     private static final UUID ERR_ID = null;
 
-    static final long MAX_MESSAGE_LIFE = 5000;
+    static final long MAX_MESSAGE_LIFE = 1000;  //  in milliseconds
 
     private static int TYPE_LENGTH = 1;
     private static int ID_LENGTH = 2 + Long.BYTES;  //  sizeof UUID
@@ -27,14 +28,21 @@ class Protocol {
 
     static final int ACCEPT_LENGTH = TYPE_LENGTH + ID_LENGTH;
 
+    /*
+     *  if (data.length + META_LENGTH > MAX_PACKET) data will be cut
+     */
     private static byte[] message(byte type, UUID id, byte[] data) {
         int dataLength = (data == null) ? 0 : data.length;
-        ByteBuffer buffer = ByteBuffer.allocate(TYPE_LENGTH + ID_LENGTH + dataLength)
+        if (META_LENGTH + dataLength > MAX_PACKET)
+            dataLength = MAX_PACKET - META_LENGTH;
+
+        ByteBuffer buffer = ByteBuffer.allocate(META_LENGTH + dataLength)
                 .put(type)
                 .putLong(id.getMostSignificantBits())
                 .putLong(id.getLeastSignificantBits());
+
         if (dataLength > 0)
-            buffer.put(data);
+            buffer.put(data, 0, dataLength);
 
         return buffer.array();
     }

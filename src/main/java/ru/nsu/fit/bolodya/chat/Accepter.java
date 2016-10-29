@@ -11,7 +11,7 @@ class Accepter {
         this.messages = messages;
     }
 
-    void accept(UUID id, Connection connection) {
+    void receiveAccept(UUID id, Connection connection) {
         Message message = messages.get(id);
 
         if (message == null || connection == null)
