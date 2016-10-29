@@ -8,30 +8,30 @@ class Messenger {
 
     private Map<UUID, Message> messages;
     private Collection<Connection> neighbours;
-    private PrintMessage printer;
+    private Printable printer;
 
     private Map<UUID, Long> lastMessages = new HashMap<>();
 
-    Messenger(Map<UUID, Message> messages, Collection<Connection> neighbours, PrintMessage printer) {
+    Messenger(Map<UUID, Message> messages, Collection<Connection> neighbours, Printable printer) {
         this.messages = messages;
         this.neighbours = neighbours;
         this.printer = printer;
     }
 
     void receiveMessage(byte[] data, Connection connection) {
-        connection.sendAccept(MESSAGE, getID(data));
+        connection.send(accept(MESSAGE, getID(data)));
         if (lastMessages.containsKey(getID(data))) {
             return;
         }
 
-        printer.run(data);
+        printer.print(data);
 
         messages.put(getID(data), new Message(data, neighbours).removeConnection(connection));
         lastMessages.put(getID(data), System.currentTimeMillis());
     }
 
     void sendMessage(byte[] data) {
-        printer.run(data);
+        printer.print(data);
 
         messages.put(getID(data), new Message(data, neighbours));
         lastMessages.put(getID(data), System.currentTimeMillis());

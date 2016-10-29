@@ -5,7 +5,7 @@ import ru.nsu.fit.bolodya.chat.Node;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 
-public class Main {
+public class RootMain {
 
     public static void main(String[] args) {
         try {

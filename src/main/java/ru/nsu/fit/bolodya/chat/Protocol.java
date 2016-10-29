@@ -4,29 +4,30 @@ import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.UUID;
 
 class Protocol {
     static final int MAX_PACKET = 1024 * 1024;
 
-    private static final byte TYPE_MASK     = 0b01111;
-    private static final byte ACCEPT_MASK   = 0b10000;
+    private static final byte TYPE_MASK     = 0b0111;   //  0 - 7
+    private static final byte ACCEPT_MASK   = 0b1000;
 
-    static final byte CONNECT       = 0b0001;
-    static final byte MESSAGE       = 0b0010;
-    static final byte DISCONNECT    = 0b0100;
+    static final byte CAPTURE       = 0;
+    static final byte CONNECT       = 1;
+    static final byte MESSAGE       = 2;
+    static final byte DISCONNECT    = 3;
 
-    private static final byte ERR_TYPE = 0;
+    private static final byte ERR_TYPE = -1;
     private static final UUID ERR_ID = null;
 
     static final long MAX_MESSAGE_LIFE = 1000;  //  in milliseconds
 
-    private static int TYPE_LENGTH = 1;
-    private static int ID_LENGTH = 2 + Long.BYTES;  //  sizeof UUID
-    private static int META_LENGTH = TYPE_LENGTH + ID_LENGTH;
+    private static int TYPE_LENGTH  = 1;
+    private static int ID_LENGTH    = 2 * Long.BYTES;  //  sizeof UUID
+    private static int META_LENGTH  = TYPE_LENGTH + ID_LENGTH;
 
-    static final int ACCEPT_LENGTH = TYPE_LENGTH + ID_LENGTH;
+    static final byte[] CAPTURE_ACCEPT  = { 1 };
+    static final byte[] CAPTURE_DECLINE = { 0 };
 
     /*
      *  if (data.length + META_LENGTH > MAX_PACKET) data will be cut
@@ -47,15 +48,21 @@ class Protocol {
         return buffer.array();
     }
 
-    static byte[] connectMessage(UUID id) {
+    //  Different message types
+
+    static byte[] capture(UUID id) {
+        return message(CAPTURE, id, null);
+    }
+
+    static byte[] connect(UUID id) {
         return message(CONNECT, id, null);
     }
 
-    static byte[] acceptMessage(byte type, UUID id) {
-        return message((byte) (type | ACCEPT_MASK), id, null);
+    static byte[] message(UUID id, byte[] data) {
+        return message(MESSAGE, id, data);
     }
 
-    static byte[] disconnectMessage(UUID id, InetSocketAddress socket) {
+    static byte[] disconnect(UUID id, InetSocketAddress socket) {
         byte[] address = socket.getAddress().getAddress();
         byte[] data = ByteBuffer.allocate(address.length + Integer.BYTES)
                 .put(address)
@@ -65,17 +72,15 @@ class Protocol {
         return message(DISCONNECT, id, data);
     }
 
-    static byte[] packMessage(UUID id, byte[] data) {
-        return message(MESSAGE, id, data);
+    static byte[] accept(byte type, UUID id, byte[] answer) {
+        return message((byte) (type | ACCEPT_MASK), id, answer);
     }
 
-    static boolean filter(byte[] data) {
-        return !(getType(data) == ERR_TYPE || getID(data) == ERR_ID);
+    static byte[] accept(byte type, UUID id) {
+        return accept((byte) (type | ACCEPT_MASK), id, null);
     }
 
-    static boolean isAccept(byte[] data) {
-        return (data[0] & ACCEPT_MASK) != 0;
-    }
+    //  Parse message
 
     static byte getType(byte[] data) {
         if (data.length < TYPE_LENGTH || (data[0] & TYPE_MASK) > DISCONNECT)
@@ -95,7 +100,7 @@ class Protocol {
         return new UUID(most, least);
     }
 
-    static String getMessage(byte[] data) {
+    static String getData(byte[] data) {
         int length = data.length - META_LENGTH;
 
         byte[] tmp = new byte[length];
@@ -108,6 +113,27 @@ class Protocol {
         catch (UnsupportedEncodingException ignored) {}
 
         return result;
+    }
+
+    //  Work with metadata
+
+    static boolean filter(byte[] data) {
+        return !(getType(data) == ERR_TYPE || getID(data) == ERR_ID);
+    }
+
+    static boolean isAccept(byte[] data) {
+        return (data[0] & ACCEPT_MASK) != 0;
+    }
+
+    //  Other
+
+    static boolean isCaptured(byte[] data) {
+        if (getType(data) != CAPTURE || !isAccept(data))
+            return false;
+
+        ByteBuffer buffer = (ByteBuffer) ByteBuffer.wrap(data).position(META_LENGTH);
+
+        return (buffer.get() != 0);
     }
 
     static InetSocketAddress getParent(byte[] data) {

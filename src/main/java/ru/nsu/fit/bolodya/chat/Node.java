@@ -3,10 +3,7 @@ package ru.nsu.fit.bolodya.chat;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.*;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
-import java.util.UUID;
+import java.util.*;
 
 import static ru.nsu.fit.bolodya.chat.Protocol.*;
 
@@ -16,10 +13,15 @@ public class Node {
 
     private Map<UUID, Message> messages = new HashMap<>();
     private Map<InetSocketAddress, Connection> neighbours = new HashMap<>();
+    private Set<Connection> captureSet = new HashSet<>();
 
     private Connector connector;
     private Accepter accepter;
     private Messenger messenger;
+    private Capturer capturer;
+
+    private boolean shutdownFlag = false;
+    private boolean captureFlag = false;
 
     static {
         try {
@@ -48,27 +50,25 @@ public class Node {
             neighbours.put(address, parent[0]);
 
             UUID id = nextID();
-            messages.put(id, new Message(connectMessage(id), parent[0]).send());
+            messages.put(id, new Message(connect(id), parent[0]).send());
         } else {
             parent[0] = null;
         }
 
-        connector = new Connector(socket, messages.values(), neighbours, parent);
+        connector = new Connector(socket, messages.values(),
+                neighbours, captureSet, parent, this::shutdown);
         accepter = new Accepter(messages);
         messenger = new Messenger(messages, neighbours.values(), this::printMessage);
+        capturer = new Capturer(messages, captureSet, this::shutdown);
 
-        Disconnector disconnector = new Disconnector(socket,
-                messages, neighbours,
-                connector, accepter, messenger,
-                this::packetReceived, this::packetSpecial, this::printMessage);
-        Runtime.getRuntime().addShutdownHook(new Thread(disconnector::routine));
+        //  TODO:   shutdown hook
 
         mainLoop();
     }
 
     private void mainLoop() {
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
-        while (true) {
+        while (captureFlag) {
             messageRoutine();
 
             messages.values().forEach(Message::send);
@@ -87,23 +87,32 @@ public class Node {
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
             /*
-             *  DISCONNECT + ACCEPT
              *  CONNECT
+             *  DISCONNECT
              *  not neighbour
              */
             if (packetSpecial(data, id, address))
                 continue;
 
             if (isAccept(data)) {
-                if (getType(data) == CONNECT)
-                    connector.receiveAcceptConnect(accepter, id, address);
-                else
-                    accepter.receiveAccept(id, neighbours.get(address));
+                switch (getType(data)) {
+                    case CONNECT:
+                        connector.receiveAcceptConnect(accepter, id, address);
+                        break;
+                    case MESSAGE:
+                        accepter.receiveAccept(id, neighbours.get(address));
+                        break;
+                    case DISCONNECT:
+                        connector.receiveAcceptDisconnect(accepter, id, neighbours.get(address));
+                }
 
                 continue;
             }
 
             switch (getType(data)) {
+                case CAPTURE:
+                    capturer.acceptCapture(data, neighbours.get(address));
+                    break;
                 case MESSAGE:
                     messenger.receiveMessage(data, neighbours.get(address));
                     break;
@@ -117,7 +126,7 @@ public class Node {
         Scanner scanner = new Scanner(System.in);
         if (scanner.hasNext()) {
             try {
-                messenger.sendMessage(packMessage(nextID(), scanner.next().getBytes("UTF8")));
+                messenger.sendMessage(message(nextID(), scanner.next().getBytes("UTF8")));
             }
             catch (UnsupportedEncodingException ignored) {}
         }
@@ -140,8 +149,8 @@ public class Node {
             return true;
         }
 
-        if (getType(data) == DISCONNECT && isAccept(data)) {
-            connector.receiveAcceptDisconnect(accepter, id, address);
+        if (getType(data) == DISCONNECT && !isAccept(data)) {
+            connector.receiveDisconnect(data, address);
             return true;
         }
 
@@ -154,6 +163,22 @@ public class Node {
     }
 
     private void printMessage(byte[] data) {
-        System.out.printf("%s:  %s\n", getID(data), getMessage(data));
+        System.out.printf("%s:  %s\n", getID(data), getData(data));
+    }
+
+    //  Shutdown routines
+
+    //  TODO:   all is wrong
+
+    private void shutdown() {
+        if (shutdownFlag)
+            captureFlag = true;
+    }
+
+    private void shutdownLoop() {
+        shutdownFlag = true;
+        mainLoop();
+
+
     }
 }
