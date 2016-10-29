@@ -18,8 +18,8 @@ class Messenger {
         this.printer = printer;
     }
 
-    void message(byte[] data, Connection connection) {
-        connection.accept(getID(data));
+    void receiveMessage(byte[] data, Connection connection) {
+        connection.accept(MESSAGE, getID(data));
         if (lastMessages.containsKey(getID(data))) {
             return;
         }
@@ -30,7 +30,7 @@ class Messenger {
         lastMessages.put(getID(data), System.currentTimeMillis());
     }
 
-    void message(byte[] data) {
+    void sendMessage(byte[] data) {
         printer.print(data);
 
         messages.put(getID(data), new Message(data, neighbours));
@@ -43,12 +43,14 @@ class Messenger {
         Iterator<Map.Entry<UUID, Long>> iterator = lastMessages.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<UUID, Long> entry = iterator.next();
+
             if (curTime - entry.getValue() > MAX_MESSAGE_LIFE) {
                 Message message = messages.get(entry.getKey());
                 if (message != null) {
                     message.close(connector);
                     messages.remove(entry.getKey());
                 }
+
                 iterator.remove();
             }
         }

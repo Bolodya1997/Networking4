@@ -9,13 +9,15 @@ import java.util.UUID;
 class Protocol {
     static final int MAX_PACKET = 1024 * 1024;
 
+    private static final byte TYPE_MASK     = 0b01111;
+    private static final byte ACCEPT_MASK   = 0b10000;
+
     static final byte CONNECT       = 0b0001;
     static final byte MESSAGE       = 0b0010;
     static final byte DISCONNECT    = 0b0100;
-    static final byte ACCEPT        = 0b1000;    //  sets as flag
-    static final byte ERR_TYPE      = 0b0000;
 
-    static final UUID ERR_ID = null;
+    private static final byte ERR_TYPE = 0;
+    private static final UUID ERR_ID = null;
 
     static final long MAX_MESSAGE_LIFE = 5000;
 
@@ -42,7 +44,7 @@ class Protocol {
     }
 
     static byte[] acceptMessage(byte type, UUID id) {
-        return message((byte) (type | ACCEPT), id, null);
+        return message((byte) (type | ACCEPT_MASK), id, null);
     }
 
     static byte[] disconnectMessage(UUID id, InetSocketAddress socket) {
@@ -63,11 +65,15 @@ class Protocol {
         return !(getType(data) == ERR_TYPE || getID(data) == ERR_ID);
     }
 
+    static boolean isAccept(byte[] data) {
+        return (data[0] & ACCEPT_MASK) != 0;
+    }
+
     static byte getType(byte[] data) {
-        if (data.length < TYPE_LENGTH || data[0] > DISCONNECT)
+        if (data.length < TYPE_LENGTH || (data[0] & TYPE_MASK) > DISCONNECT)
             return ERR_TYPE;
 
-        return data[0];
+        return (byte) (data[0] & TYPE_MASK);
     }
 
     static UUID getID(byte[] data) {

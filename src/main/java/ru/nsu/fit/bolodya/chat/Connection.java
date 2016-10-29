@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.util.UUID;
 
-import static ru.nsu.fit.bolodya.chat.Protocol.*;
+import static ru.nsu.fit.bolodya.chat.Protocol.ACCEPT_LENGTH;
+import static ru.nsu.fit.bolodya.chat.Protocol.acceptMessage;
 
 class Connection {
 
@@ -28,9 +28,9 @@ class Connection {
         }
     }
 
-    void accept(UUID id) {  //  TODO:   fix type of accept
+    void accept(byte type, UUID id) {
         try {
-            socket.send(new DatagramPacket(acceptMessage(MESSAGE, id), ACCEPT_LENGTH, address));
+            socket.send(new DatagramPacket(acceptMessage(type, id), ACCEPT_LENGTH, address));
         }
         catch (IOException e) {
             e.printStackTrace();

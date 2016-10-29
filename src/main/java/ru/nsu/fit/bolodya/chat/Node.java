@@ -66,37 +66,43 @@ public class Node {
             messageRoutine();
 
             messages.values().forEach(Message::send);
-            messenger.updateLastMessages();
+            messenger.updateLastMessages(connector);
 
-            try {
-                socket.receive(receivePacket);
-            } catch (IOException e) {
-                continue;
-            }
-            if (Math.random() < 0.99)
+            /*
+             *  failed on receive
+             *  skipped
+             *  bad receiveMessage
+             */
+            if (!packetReceived(receivePacket))
                 continue;
 
             byte[] data = receivePacket.getData();
-            if (filter(data))
+            UUID id = getID(data);
+            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
+
+            /*
+             *  DISCONNECT + ACCEPT
+             *  CONNECT
+             *  not neighbour
+             */
+            if (packetSpecial(data, id, address))
                 continue;
 
-            if (getType(data) != CONNECT && !neighbours.containsKey(receivePacket.getSocketAddress()))
+            if (isAccept(data)) {
+                if (getType(data) == CONNECT)
+                    connector.acceptConnect(accepter, id, address);
+                else
+                    accepter.accept(id, neighbours.get(address));
+
                 continue;
+            }
 
             switch (getType(data)) {
-                case CONNECT:
-                    connector.connect(getID(data), (InetSocketAddress) receivePacket.getSocketAddress());
-                    break;
-                case ACCEPT:
-                    accepter.accept(getID(data),
-                            neighbours.get(receivePacket.getSocketAddress()));
-                    break;
                 case MESSAGE:
-                    messenger.message(data, neighbours.get(receivePacket.getSocketAddress()));
+                    messenger.receiveMessage(data, neighbours.get(address));
                     break;
                 case DISCONNECT:
-                    connector.disconnect(data, (InetSocketAddress) receivePacket.getSocketAddress());
-                    break;
+                    connector.receiveDisconnect(data, address);
             }
         }
     }
@@ -105,10 +111,36 @@ public class Node {
         Scanner scanner = new Scanner(System.in);
         if (scanner.hasNext()) {
             try {
-                messenger.message(packMessage(nextID(), scanner.next().getBytes("UTF8")));
+                messenger.sendMessage(packMessage(nextID(), scanner.next().getBytes("UTF8")));
             }
             catch (UnsupportedEncodingException ignored) {}
         }
+    }
+
+    private boolean packetReceived(DatagramPacket receivePacket) {
+        try {
+            socket.receive(receivePacket);
+        }
+        catch (IOException e) {
+            return false;
+        }
+        return Math.random() >= 0.99 && !filter(receivePacket.getData());
+
+    }
+
+    private boolean packetSpecial(byte[] data, UUID id, InetSocketAddress address) {
+        if (getType(data) == CONNECT && !isAccept(data)) {
+            connector.receiveConnect(id, address);
+            return true;
+        }
+
+        if (getType(data) == DISCONNECT && isAccept(data)) {
+            connector.acceptDisconnect(accepter, id, address);
+            return true;
+        }
+
+        return !neighbours.containsKey(address);
+
     }
 
     private UUID nextID() {
