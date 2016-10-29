@@ -31,7 +31,11 @@ public class Node {
         }
     }
 
-    private Node(int myPort, String hostName, int port) throws SocketException, UnknownHostException {
+    public Node(int myPort) throws SocketException, UnknownHostException {
+        this(myPort, null, 0);
+    }
+
+    public Node(int myPort, String hostName, int port) throws SocketException, UnknownHostException {
         socket = new DatagramSocket(myPort);
         socket.setSoTimeout(100);
 
@@ -62,6 +66,7 @@ public class Node {
             messageRoutine();
 
             messages.values().forEach(Message::send);
+            messenger.updateLastMessages();
 
             try {
                 socket.receive(receivePacket);
@@ -72,7 +77,7 @@ public class Node {
                 continue;
 
             byte[] data = receivePacket.getData();
-            if (getType(data) == ERR_TYPE || getID(data) == ERR_ID)
+            if (filter(data))
                 continue;
 
             if (getType(data) != CONNECT && !neighbours.containsKey(receivePacket.getSocketAddress()))

@@ -19,8 +19,6 @@ class Messenger {
     }
 
     void message(byte[] data, Connection connection) {
-        updateLastMessages();
-
         connection.accept(getID(data));
         if (lastMessages.containsKey(getID(data))) {
             return;
@@ -33,15 +31,13 @@ class Messenger {
     }
 
     void message(byte[] data) {
-        updateLastMessages();
-
         printer.print(data);
 
         messages.put(getID(data), new Message(data, neighbours));
         lastMessages.put(getID(data), System.currentTimeMillis());
     }
 
-    private void updateLastMessages() {
+    void updateLastMessages(Connector connector) {
         long curTime = System.currentTimeMillis();
 
         Iterator<Map.Entry<UUID, Long>> iterator = lastMessages.entrySet().iterator();
@@ -50,7 +46,7 @@ class Messenger {
             if (curTime - entry.getValue() > MAX_MESSAGE_LIFE) {
                 Message message = messages.get(entry.getKey());
                 if (message != null) {
-                    //  TODO:   Message::close() -> Connection::close()
+                    message.close(connector);
                     messages.remove(entry.getKey());
                 }
                 iterator.remove();

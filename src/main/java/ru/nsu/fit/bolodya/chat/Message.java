@@ -39,6 +39,10 @@ class Message {
         return this;
     }
 
+    void close(Connector connector) {
+        connections.forEach(connector::lostConnection);
+    }
+
     boolean isDelivered() {
         return connections.isEmpty();
     }

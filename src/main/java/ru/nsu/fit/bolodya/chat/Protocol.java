@@ -59,6 +59,10 @@ class Protocol {
         return message(MESSAGE, id, data);
     }
 
+    static boolean filter(byte[] data) {
+        return !(getType(data) == ERR_TYPE || getID(data) == ERR_ID);
+    }
+
     static byte getType(byte[] data) {
         if (data.length < TYPE_LENGTH || data[0] > DISCONNECT)
             return ERR_TYPE;

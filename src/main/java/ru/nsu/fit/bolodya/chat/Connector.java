@@ -46,8 +46,8 @@ class Connector {
         neighbours.remove(address);
     }
 
-    void lostConnection(InetSocketAddress address) {
-        Connection connection = neighbours.get(address);
+    void lostConnection(Connection connection) {
+        InetSocketAddress address = connection.getAddress();
 
         neighbours.remove(address);
         if (connection == parent[0])

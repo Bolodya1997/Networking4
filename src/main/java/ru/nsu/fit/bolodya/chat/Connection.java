@@ -3,6 +3,7 @@ package ru.nsu.fit.bolodya.chat;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.UUID;
 
@@ -11,9 +12,9 @@ import static ru.nsu.fit.bolodya.chat.Protocol.*;
 class Connection {
 
     private DatagramSocket socket;
-    private SocketAddress address;
+    private InetSocketAddress address;
 
-    Connection(DatagramSocket socket, SocketAddress address) {
+    Connection(DatagramSocket socket, InetSocketAddress address) {
         this.socket = socket;
         this.address = address;
     }
@@ -34,5 +35,9 @@ class Connection {
         catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    InetSocketAddress getAddress() {
+        return address;
     }
 }
