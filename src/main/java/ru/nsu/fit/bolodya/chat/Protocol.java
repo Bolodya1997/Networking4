@@ -27,7 +27,7 @@ class Protocol {
     static final byte DISCONNECT            = 0b0011;
 
     private static final byte RESPONSE_MASK = 0b1100;
-//  static final byte NO_RESPONSE           = 0b0000;
+    static final byte NO_RESPONSE           = 0b0000;
     static final byte RESPONSE              = 0b0100;
     static final byte ACCEPT                = 0b1000;
     static final byte DECLINE               = 0b1100;
@@ -100,6 +100,10 @@ class Protocol {
         return (byte) (data[0] & TYPE_MASK);
     }
 
+    static byte getResponse(byte[] data) {
+        return (byte) (data[0] & RESPONSE_MASK);
+    }
+
     static UUID getID(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data, TYPE_LENGTH, ID_LENGTH);
         long most = buffer.getLong();
@@ -139,9 +143,5 @@ class Protocol {
 
     static boolean filter(byte[] data) {
         return data.length < META_LENGTH;
-    }
-
-    static boolean isResponse(byte[] data) {
-        return (data[0] & RESPONSE_MASK) != 0;
     }
 }

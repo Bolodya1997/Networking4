@@ -55,7 +55,7 @@ public class Node {
         connector = new Connector(socket, messages.values(), neighbours, captureSet);
         responser = new Responser(messages);
         messenger = new Messenger(messages, neighbours.values(), this::printMessage);
-        parenter = new Parenter(messages, neighbours, connector, responser, parentAddress);
+        parenter = new Parenter(messages, neighbours, connector, responser, parentAddress, this::shutdown);
 
         //  TODO:   shutdown hook
 
@@ -109,7 +109,7 @@ public class Node {
              *  MESSAGE
              *  DISCONNECT
              */
-            if (isResponse(data)) {
+            if (getResponse(data) == NO_RESPONSE) {
                 switch (getType(data)) {
                     case MESSAGE:
                         responser.handleResponse(id, connection);
@@ -163,17 +163,23 @@ public class Node {
         if (!parenter.isParent(address))
             return false;
 
-        if (getType(data) == DISCONNECT && !isResponse(data)) {
+        if (getType(data) == DISCONNECT && getResponse(data) != NO_RESPONSE) {
             parenter.handleDisconnect(data);
             return true;
         }
 
-        if (getType(data) == CAPTURE && isResponse(data)) {
-            parenter.handleCaptureResponse(data);
-            return true;
+        if (getType(data) == CAPTURE) {
+            if (getResponse(data) == ACCEPT) {
+                parenter.handleCaptureAccept(data);
+                return true;
+            }
+            if (getResponse(data) == DECLINE) {
+                parenter.handleCaptureDecline(data);
+                return true;
+            }
         }
 
-        if (getType(data) == CONNECT && isResponse(data)) {
+        if (getType(data) == CONNECT && getResponse(data) == RESPONSE) {
             parenter.handleConnectResponse(data);
             return true;
         }
@@ -182,12 +188,12 @@ public class Node {
     }
 
     private boolean packetSpecial(byte[] data, UUID id, InetSocketAddress address) {
-        if (getType(data) == CONNECT && !isResponse(data)) {
+        if (getType(data) == CONNECT && getResponse(data) == NO_RESPONSE) {
             connector.handleConnect(id, address);
             return true;
         }
 
-        if (getType(data) == DISCONNECT && !isResponse(data)) {
+        if (getType(data) == DISCONNECT && getResponse(data) == NO_RESPONSE) {
             connector.handleDisconnect(data, address);
             return true;
         }
@@ -205,4 +211,7 @@ public class Node {
 
     //  Shutdown routines
 
+    private void shutdown() {
+        //  TODO:   todo!
+    }
 }

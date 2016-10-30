@@ -20,14 +20,18 @@ class Parenter {
     private UUID oldParentID;
     private boolean reconnecting = false;
 
+    private Runnable shutdown;
+    private boolean disconnecting = false;
+
     Parenter(Map<UUID, Message> messages, Map<InetSocketAddress, Connection> neighbours,
              Connector connector, Responser responser,
-             InetSocketAddress parentAddress) {
+             InetSocketAddress parentAddress, Runnable shutdown) {
         this.messages = messages;
         this.neighbours = neighbours;
         this.connector = connector;
         this.responser = responser;
         this.parentAddress = parentAddress;
+        this.shutdown = shutdown;
     }
 
     boolean isParent(InetSocketAddress address) {
@@ -56,8 +60,12 @@ class Parenter {
         neighbours.remove(parentAddress);
     }
 
-    void handleCaptureResponse(byte[] data) {
-        //  TODO:   ???
+    void handleCaptureAccept() {
+        shutdown.run();
+    }
+
+    void handleCaptureDecline() {
+        disconnecting = true;
     }
 
     void handleConnectResponse(byte[] data) {
@@ -66,6 +74,14 @@ class Parenter {
             reconnecting = false;
         }
 
+        if (disconnecting) {
+            //  TODO:   add capture request
+        }
+
         responser.handleResponse(getID(data), neighbours.get(parentAddress));
+    }
+
+    private UUID nextID() {
+        return UUID.randomUUID();   //  TODO:   fix it :(
     }
 }
