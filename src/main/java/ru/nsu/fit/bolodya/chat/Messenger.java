@@ -33,8 +33,25 @@ class Messenger {
     void sendMessage(byte[] data) {
         printer.print(data);
 
-        messages.put(getID(data), new Message(data, neighbours));
+        messages.put(getID(data), new Message(data, neighbours).send());
         lastMessages.put(getID(data), System.currentTimeMillis());
+    }
+
+    void addSystemMessage(UUID id, Message message) {
+        messages.put(id, message.send());
+        lastMessages.put(id, System.currentTimeMillis());
+    }
+
+    void addConnection(Connection connection) {
+        for (UUID id : messages.keySet()) {
+            messages.get(id).addConnection(connection);
+            lastMessages.put(id, System.currentTimeMillis());
+        }
+    }
+
+    void removeConnection(Connection connection) {
+        for (UUID id : messages.keySet())
+            messages.get(id).removeConnection(connection);
     }
 
     void updateLastMessages(Connector connector) {

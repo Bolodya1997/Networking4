@@ -1,6 +1,5 @@
 package ru.nsu.fit.bolodya.chat;
 
-import java.lang.reflect.Array;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.util.Map;
@@ -12,16 +11,18 @@ import static ru.nsu.fit.bolodya.chat.Protocol.*;
 class Connector {
 
     private DatagramSocket socket;
-    private Map<UUID, Message> messages;
     private Map<InetSocketAddress, Connection> neighbours;
+
     private Set<Connection> captureSet;
 
-    Connector(DatagramSocket socket, Map<UUID, Message> messages, Map<InetSocketAddress,
-              Connection> neighbours, Set<Connection> captureSet) {
+    private Messenger messenger;
+
+    Connector(DatagramSocket socket, Map<InetSocketAddress, Connection> neighbours,
+              Set<Connection> captureSet, Messenger messenger) {
         this.socket = socket;
-        this.messages = messages;
         this.neighbours = neighbours;
         this.captureSet = captureSet;
+        this.messenger = messenger;
     }
 
     void acceptCapture(UUID id, Connection connection) {
@@ -38,8 +39,7 @@ class Connector {
             Connection connection = new Connection(socket, address);
 
             neighbours.put(address, connection);
-            for (Message message : messages.values())
-                message.addConnection(connection);
+            messenger.addConnection(connection);
         }
 
         neighbours.get(address).send(response(CONNECT, id));
@@ -66,8 +66,7 @@ class Connector {
 
         neighbours.remove(address);
 
-        for (Message message : messages.values())
-            message.removeConnection(connection);
+        messenger.removeConnection(connection);
     }
 
     void sendDisconnect(InetSocketAddress parentAddress) {
@@ -80,9 +79,8 @@ class Connector {
         else
             parent = new Connection(socket, parentAddress);
 
-
         UUID id = Message.nextID();
         byte[] data = disconnect(id, parent.getAddress());
-        messages.put(id, new Message(data, neighbours.values()).removeConnection(parent));
+        messenger.addSystemMessage(id, new Message(data, neighbours.values()).removeConnection(parent));
     }
 }

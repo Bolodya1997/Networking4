@@ -8,10 +8,9 @@ import static ru.nsu.fit.bolodya.chat.Protocol.*;
 
 class Parenter {
 
-    private Map<UUID, Message> messages;
     private Map<InetSocketAddress, Connection> neighbours;
 
-    private Connector connector;
+    private Messenger messenger;
     private Responser responser;
 
     private InetSocketAddress parentAddress;
@@ -23,12 +22,11 @@ class Parenter {
     private Runnable shutdown;
     private boolean disconnecting = false;
 
-    Parenter(Map<UUID, Message> messages, Map<InetSocketAddress, Connection> neighbours,
-             Connector connector, Responser responser,
+    Parenter(Map<InetSocketAddress, Connection> neighbours,
+             Messenger messenger, Responser responser,
              InetSocketAddress parentAddress, Runnable shutdown) {
-        this.messages = messages;
         this.neighbours = neighbours;
-        this.connector = connector;
+        this.messenger = messenger;
         this.responser = responser;
         this.parentAddress = parentAddress;
         this.shutdown = shutdown;
@@ -78,7 +76,7 @@ class Parenter {
         Connection parent = neighbours.get(parentAddress);
         if (disconnecting) {
             UUID id = Message.nextID();
-            messages.put(id, new Message(capture(id), parent));
+            messenger.addSystemMessage(id, new Message(capture(id), parent));
         }
 
         responser.handleResponse(getID(data), parent);

@@ -13,11 +13,12 @@ public class Node {
 
     private Map<UUID, Message> messages = new HashMap<>();
     private Map<InetSocketAddress, Connection> neighbours = new HashMap<>();
+
     private Set<Connection> captureSet = new HashSet<>();
 
+    private Messenger messenger;
     private Connector connector;
     private Responser responser;
-    private Messenger messenger;
     private Parenter parenter;
 
     static {
@@ -38,6 +39,8 @@ public class Node {
         socket = new DatagramSocket(myPort);
         socket.setSoTimeout(100);
 
+        messenger = new Messenger(messages, neighbours.values(), this::printMessage);
+
         InetSocketAddress parentAddress;
 
         if (hostName != null) {
@@ -47,15 +50,14 @@ public class Node {
             neighbours.put(parentAddress, parent);
 
             UUID id = Message.nextID();
-            messages.put(id, new Message(connect(id), parent).send());
+            messenger.addSystemMessage(id, new Message(connect(id), parent));
         } else {
             parentAddress = null;
         }
 
-        connector = new Connector(socket, messages, neighbours, captureSet);
+        connector = new Connector(socket, neighbours, captureSet, messenger);
         responser = new Responser(messages);
-        messenger = new Messenger(messages, neighbours.values(), this::printMessage);
-        parenter = new Parenter(messages, neighbours, connector, responser, parentAddress, this::shutdown);
+        parenter = new Parenter(neighbours, messenger, responser, parentAddress, this::shutdown);
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::waitForCaptureLoop));
 
@@ -65,7 +67,10 @@ public class Node {
     private void mainLoop() {
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
         while (true) {
-            messageRoutine();
+            try {
+                messageRoutine();
+            }
+            catch (IOException ignored) {}
 
             messages.values().forEach(Message::send);
             messenger.updateLastMessages(connector);
@@ -116,9 +121,9 @@ public class Node {
         }
     }
 
-    private void messageRoutine() {
+    private void messageRoutine() throws IOException {
         Scanner scanner = new Scanner(System.in);
-        if (scanner.hasNext()) {
+        if (System.in.available() > 0) {
             try {
                 messenger.sendMessage(message(Message.nextID(), scanner.next().getBytes("UTF8")));
             }
@@ -291,8 +296,9 @@ public class Node {
 
         UUID id = Message.nextID();
         Connection parent = new Connection(socket, parenter.getParentAddress());
+        messenger.addSystemMessage(id, new Message(disconnect(id, null), parent));
+
         neighbours.put(parent.getAddress(), parent);    //  for the correct isParent() call
-        messages.put(id, new Message(disconnect(id, null), parent));
         waitParentLoop();   //  3
     }
 
