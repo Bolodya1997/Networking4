@@ -18,8 +18,8 @@ class Messenger {
         this.printer = printer;
     }
 
-    void receiveMessage(byte[] data, Connection connection) {
-        connection.send(accept(MESSAGE, getID(data)));
+    void handleMessage(byte[] data, Connection connection) {
+        connection.send(response(MESSAGE, getID(data)));
         if (lastMessages.containsKey(getID(data))) {
             return;
         }

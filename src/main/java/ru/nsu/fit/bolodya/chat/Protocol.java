@@ -1,41 +1,41 @@
 package ru.nsu.fit.bolodya.chat;
 
 import java.io.UnsupportedEncodingException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
 class Protocol {
-    static final int MAX_PACKET = 1024 * 1024;
-
-    private static final byte TYPE_MASK     = 0b0111;   //  0 - 7
-    private static final byte ACCEPT_MASK   = 0b1000;
-
-    static final byte CAPTURE       = 0;
-    static final byte CONNECT       = 1;
-    static final byte MESSAGE       = 2;
-    static final byte DISCONNECT    = 3;
-
-    private static final byte ERR_TYPE = -1;
-    private static final UUID ERR_ID = null;
-
-    static final long MAX_MESSAGE_LIFE = 1000;  //  in milliseconds
 
     private static int TYPE_LENGTH  = 1;
     private static int ID_LENGTH    = 2 * Long.BYTES;  //  sizeof UUID
     private static int META_LENGTH  = TYPE_LENGTH + ID_LENGTH;
 
-    static final byte[] CAPTURE_ACCEPT  = { 1 };
-    static final byte[] CAPTURE_DECLINE = { 0 };
+    static final int MAX_DATA = 1024 * 1024;
+    static final int MAX_PACKET = MAX_DATA + META_LENGTH;
 
-    /*
-     *  if (data.length + META_LENGTH > MAX_PACKET) data will be cut
-     */
-    private static byte[] message(byte type, UUID id, byte[] data) {
+    static final long MAX_MESSAGE_LIFE = 1000;  //  in milliseconds
+
+//  TYPE = 0b0000RRTT
+
+    private static final byte TYPE_MASK     = 0b0011;
+    static final byte CAPTURE               = 0b0000;
+    static final byte CONNECT               = 0b0001;
+    static final byte MESSAGE               = 0b0010;
+    static final byte DISCONNECT            = 0b0011;
+
+    private static final byte RESPONSE_MASK = 0b1100;
+//  static final byte NO_RESPONSE           = 0b0000;
+    static final byte RESPONSE              = 0b0100;
+    static final byte ACCEPT                = 0b1000;
+    static final byte DECLINE               = 0b1100;
+
+//  Different message types
+
+    private static byte[] baseMessage(byte type, UUID id, byte[] data) {
         int dataLength = (data == null) ? 0 : data.length;
-        if (META_LENGTH + dataLength > MAX_PACKET)
-            dataLength = MAX_PACKET - META_LENGTH;
+        if (dataLength > MAX_DATA)  //  cuts all data over MAX_DATA
+            dataLength = MAX_DATA;
 
         ByteBuffer buffer = ByteBuffer.allocate(META_LENGTH + dataLength)
                 .put(type)
@@ -48,18 +48,16 @@ class Protocol {
         return buffer.array();
     }
 
-    //  Different message types
-
     static byte[] capture(UUID id) {
-        return message(CAPTURE, id, null);
+        return baseMessage(CAPTURE, id, null);
     }
 
     static byte[] connect(UUID id) {
-        return message(CONNECT, id, null);
+        return baseMessage(CONNECT, id, null);
     }
 
     static byte[] message(UUID id, byte[] data) {
-        return message(MESSAGE, id, data);
+        return baseMessage(MESSAGE, id, data);
     }
 
     static byte[] disconnect(UUID id, InetSocketAddress socket) {
@@ -69,30 +67,34 @@ class Protocol {
                 .putInt(socket.getPort())
                 .array();
 
-        return message(DISCONNECT, id, data);
+        return baseMessage(DISCONNECT, id, data);
     }
 
-    static byte[] accept(byte type, UUID id, byte[] answer) {
-        return message((byte) (type | ACCEPT_MASK), id, answer);
+//  Different response types
+
+    private static byte[] baseResponse(byte responseType, byte type, UUID id) {
+        return baseMessage((byte) (type | responseType), id, null);
+    }
+
+    static byte[] response(byte type, UUID id) {
+        return baseResponse(type, RESPONSE, id);
     }
 
     static byte[] accept(byte type, UUID id) {
-        return accept((byte) (type | ACCEPT_MASK), id, null);
+        return baseResponse(type, ACCEPT, id);
     }
 
-    //  Parse message
+    static byte[] decline(byte type, UUID id) {
+        return baseResponse(type, DECLINE, id);
+    }
+
+//  Parse message
 
     static byte getType(byte[] data) {
-        if (data.length < TYPE_LENGTH || (data[0] & TYPE_MASK) > DISCONNECT)
-            return ERR_TYPE;
-
         return (byte) (data[0] & TYPE_MASK);
     }
 
     static UUID getID(byte[] data) {
-        if (data.length < TYPE_LENGTH + ID_LENGTH)
-            return ERR_ID;
-
         ByteBuffer buffer = ByteBuffer.wrap(data, TYPE_LENGTH, ID_LENGTH);
         long most = buffer.getLong();
         long least = buffer.getLong();
@@ -115,42 +117,13 @@ class Protocol {
         return result;
     }
 
-    //  Work with metadata
+//  Work with metadata
 
     static boolean filter(byte[] data) {
-        return !(getType(data) == ERR_TYPE || getID(data) == ERR_ID);
+        return data.length < META_LENGTH;
     }
 
-    static boolean isAccept(byte[] data) {
-        return (data[0] & ACCEPT_MASK) != 0;
-    }
-
-    //  Other
-
-    static boolean isCaptured(byte[] data) {
-        if (getType(data) != CAPTURE || !isAccept(data))
-            return false;
-
-        ByteBuffer buffer = (ByteBuffer) ByteBuffer.wrap(data).position(META_LENGTH);
-
-        return (buffer.get() != 0);
-    }
-
-    static InetSocketAddress getParent(byte[] data) {
-        if (getType(data) != DISCONNECT)
-            return null;
-
-        try {
-            ByteBuffer buffer = (ByteBuffer) ByteBuffer.wrap(data).position(META_LENGTH);
-
-            int addressLength = buffer.getInt();
-            byte[] tmp = new byte[addressLength];
-            buffer.get(tmp);
-            InetAddress address = InetAddress.getByAddress(tmp);
-
-            return new InetSocketAddress(address, buffer.getInt());
-        } catch (Exception e) {
-            return null;
-        }
+    static boolean isResponse(byte[] data) {
+        return (data[0] & RESPONSE_MASK) != 0;
     }
 }

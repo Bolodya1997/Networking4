@@ -16,12 +16,9 @@ public class Node {
     private Set<Connection> captureSet = new HashSet<>();
 
     private Connector connector;
-    private Accepter accepter;
+    private Responser responser;
     private Messenger messenger;
-    private Capturer capturer;
-
-    private boolean shutdownFlag = false;
-    private boolean captureFlag = false;
+    private Parenter parenter;
 
     static {
         try {
@@ -41,25 +38,24 @@ public class Node {
         socket = new DatagramSocket(myPort);
         socket.setSoTimeout(100);
 
-        Connection[] parent = new Connection[1];
+        InetSocketAddress parentAddress;
 
         if (hostName != null) {
-            InetSocketAddress address = new InetSocketAddress(InetAddress.getByName(hostName), port);
+            parentAddress = new InetSocketAddress(InetAddress.getByName(hostName), port);
 
-            parent[0] = new Connection(socket, address);
-            neighbours.put(address, parent[0]);
+            Connection parent = new Connection(socket, parentAddress);
+            neighbours.put(parentAddress, parent);
 
             UUID id = nextID();
-            messages.put(id, new Message(connect(id), parent[0]).send());
+            messages.put(id, new Message(connect(id), parent).send());
         } else {
-            parent[0] = null;
+            parentAddress = null;
         }
 
-        connector = new Connector(socket, messages.values(),
-                neighbours, captureSet, parent, this::shutdown);
-        accepter = new Accepter(messages);
+        connector = new Connector(socket, messages.values(), neighbours, captureSet);
+        responser = new Responser(messages);
         messenger = new Messenger(messages, neighbours.values(), this::printMessage);
-        capturer = new Capturer(messages, captureSet, this::shutdown);
+        parenter = new Parenter(messages, neighbours, connector, responser, messenger, parentAddress);
 
         //  TODO:   shutdown hook
 
@@ -68,7 +64,7 @@ public class Node {
 
     private void mainLoop() {
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
-        while (captureFlag) {
+        while (true) {
             messageRoutine();
 
             messages.values().forEach(Message::send);
@@ -77,7 +73,7 @@ public class Node {
             /*
              *  failed on receive
              *  skipped
-             *  bad receiveMessage
+             *  bad handleMessage
              */
             if (!packetReceived(receivePacket))
                 continue;
@@ -85,6 +81,10 @@ public class Node {
             byte[] data = receivePacket.getData();
             UUID id = getID(data);
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
+
+            if (parenter.isParent(address)) {
+                parenter.handlePacket(data);
+            }
 
             /*
              *  CONNECT
@@ -94,16 +94,16 @@ public class Node {
             if (packetSpecial(data, id, address))
                 continue;
 
-            if (isAccept(data)) {
+            if (isResponse(data)) {
                 switch (getType(data)) {
                     case CONNECT:
-                        connector.receiveAcceptConnect(accepter, id, address);
+
                         break;
                     case MESSAGE:
-                        accepter.receiveAccept(id, neighbours.get(address));
+                        responser.handleResponse(id, neighbours.get(address));
                         break;
                     case DISCONNECT:
-                        connector.receiveAcceptDisconnect(accepter, id, neighbours.get(address));
+                        connector.handleDisconnectResponse(responser, id, neighbours.get(address));
                 }
 
                 continue;
@@ -111,13 +111,13 @@ public class Node {
 
             switch (getType(data)) {
                 case CAPTURE:
-                    capturer.acceptCapture(data, neighbours.get(address));
+
                     break;
                 case MESSAGE:
-                    messenger.receiveMessage(data, neighbours.get(address));
+                    messenger.handleMessage(data, neighbours.get(address));
                     break;
                 case DISCONNECT:
-                    connector.receiveDisconnect(data, address);
+                    connector.handleDisconnect(data, address);
             }
         }
     }
@@ -139,23 +139,21 @@ public class Node {
         catch (IOException e) {
             return false;
         }
-        return Math.random() >= 0.99 && !filter(receivePacket.getData());
-
+        return Math.random() > 0.01 && !filter(receivePacket.getData());
     }
 
     private boolean packetSpecial(byte[] data, UUID id, InetSocketAddress address) {
-        if (getType(data) == CONNECT && !isAccept(data)) {
-            connector.receiveConnect(id, address);
+        if (getType(data) == CONNECT && !isResponse(data)) {
+            connector.handleConnect(id, address);
             return true;
         }
 
-        if (getType(data) == DISCONNECT && !isAccept(data)) {
-            connector.receiveDisconnect(data, address);
+        if (getType(data) == DISCONNECT && !isResponse(data)) {
+            connector.handleDisconnect(data, address);
             return true;
         }
 
         return !neighbours.containsKey(address);
-
     }
 
     private UUID nextID() {
@@ -168,17 +166,4 @@ public class Node {
 
     //  Shutdown routines
 
-    //  TODO:   all is wrong
-
-    private void shutdown() {
-        if (shutdownFlag)
-            captureFlag = true;
-    }
-
-    private void shutdownLoop() {
-        shutdownFlag = true;
-        mainLoop();
-
-
-    }
 }
