@@ -1,7 +1,9 @@
 package ru.nsu.fit.bolodya.chat;
 
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
@@ -61,8 +63,12 @@ class Protocol {
     }
 
     static byte[] disconnect(UUID id, InetSocketAddress socket) {
+        if (socket == null)
+            return baseMessage(DISCONNECT, id, null);
+
         byte[] address = socket.getAddress().getAddress();
-        byte[] data = ByteBuffer.allocate(address.length + Integer.BYTES)
+        byte[] data = ByteBuffer.allocate(Integer.BYTES + address.length + Integer.BYTES)
+                .putInt(address.length)
                 .put(address)
                 .putInt(socket.getPort())
                 .array();
@@ -102,19 +108,31 @@ class Protocol {
         return new UUID(most, least);
     }
 
-    static String getData(byte[] data) {
+    static byte[] getData(byte[] data) {
         int length = data.length - META_LENGTH;
 
         byte[] tmp = new byte[length];
         ((ByteBuffer) ByteBuffer.wrap(data).position(META_LENGTH)).get(tmp);
 
-        String result = null;
-        try {
-            result = new String(tmp, "UTF8");
-        }
-        catch (UnsupportedEncodingException ignored) {}
+        return tmp;
+    }
 
-        return result;
+    static InetSocketAddress getParent(byte[] data) {
+        if (data.length == META_LENGTH)
+            return null;
+
+        ByteBuffer buffer = (ByteBuffer) ByteBuffer.wrap(data).position(META_LENGTH);
+        int addressLength = buffer.getInt();
+        byte[] address = new byte[addressLength];
+        buffer.get(address);
+        int port = buffer.getInt();
+
+        try {
+            return new InetSocketAddress(InetAddress.getByAddress(address), port);
+        }
+        catch (UnknownHostException e) {
+            return null;
+        }
     }
 
 //  Work with metadata

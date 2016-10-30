@@ -24,6 +24,15 @@ class Connector {
         this.captureSet = captureSet;
     }
 
+    void acceptCapture(UUID id, Connection connection) {
+        captureSet.add(connection);
+        connection.send(accept(CAPTURE, id));
+    }
+
+    void declineCapture(UUID id, Connection connection) {
+        connection.send(decline(CAPTURE, id));
+    }
+
     void handleConnect(UUID id, InetSocketAddress address) {
         if (!neighbours.containsKey(address)) {
             Connection connection = new Connection(socket, address);

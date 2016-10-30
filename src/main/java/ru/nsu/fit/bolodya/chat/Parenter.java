@@ -13,25 +13,59 @@ class Parenter {
 
     private Connector connector;
     private Responser responser;
-    private Messenger messenger;
 
     private InetSocketAddress parentAddress;
 
+    private Connection oldParent;
+    private UUID oldParentID;
+    private boolean reconnecting = false;
+
     Parenter(Map<UUID, Message> messages, Map<InetSocketAddress, Connection> neighbours,
-             Connector connector, Responser responser, Messenger messenger,
+             Connector connector, Responser responser,
              InetSocketAddress parentAddress) {
         this.messages = messages;
         this.neighbours = neighbours;
         this.connector = connector;
         this.responser = responser;
-        this.messenger = messenger;
         this.parentAddress = parentAddress;
     }
 
     boolean isParent(InetSocketAddress address) {
-        return parentAddress == address;
+        if (parentAddress != address)
+            return false;
+
+        if (!neighbours.containsKey(address)) {
+            parentAddress = null;
+            return false;
+        }
+
+        return true;
     }
 
-    void handlePacket(byte[] data) {
+    void handleDisconnect(byte[] data) {
+        oldParent = neighbours.get(parentAddress);
+        oldParentID = getID(data);
+        reconnecting = true;
+
+        parentAddress = getParent(data);
+        if (parentAddress == null) {
+            oldParent.send(response(DISCONNECT, oldParentID));
+            reconnecting = false;
+        }
+
+        neighbours.remove(parentAddress);
+    }
+
+    void handleCaptureResponse(byte[] data) {
+        //  TODO:   ???
+    }
+
+    void handleConnectResponse(byte[] data) {
+        if (reconnecting) {
+            oldParent.send(response(DISCONNECT, oldParentID));
+            reconnecting = false;
+        }
+
+        responser.handleResponse(getID(data), neighbours.get(parentAddress));
     }
 }

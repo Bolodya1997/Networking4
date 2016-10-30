@@ -55,7 +55,7 @@ public class Node {
         connector = new Connector(socket, messages.values(), neighbours, captureSet);
         responser = new Responser(messages);
         messenger = new Messenger(messages, neighbours.values(), this::printMessage);
-        parenter = new Parenter(messages, neighbours, connector, responser, messenger, parentAddress);
+        parenter = new Parenter(messages, neighbours, connector, responser, parentAddress);
 
         //  TODO:   shutdown hook
 
@@ -73,18 +73,23 @@ public class Node {
             /*
              *  failed on receive
              *  skipped
-             *  bad handleMessage
+             *  bad message
              */
-            if (!packetReceived(receivePacket))
+            if (packetReceiveFailed(receivePacket))
                 continue;
 
             byte[] data = receivePacket.getData();
             UUID id = getID(data);
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
-            if (parenter.isParent(address)) {
-                parenter.handlePacket(data);
-            }
+            /*
+             *  from parent +
+             *      DISCONNECT
+             *      CAPTURE + RESPONSE
+             *      CONNECT + RESPONSE
+             */
+            if (packetParent(data, address))
+                continue;
 
             /*
              *  CONNECT
@@ -94,30 +99,42 @@ public class Node {
             if (packetSpecial(data, id, address))
                 continue;
 
+            Connection connection = neighbours.get(address);
+
+            /*
+             *  RESPONSES
+             *
+             *  CAPTURE     - parent
+             *  CONNECT     - parent
+             *  MESSAGE
+             *  DISCONNECT
+             */
             if (isResponse(data)) {
                 switch (getType(data)) {
-                    case CONNECT:
-
-                        break;
                     case MESSAGE:
-                        responser.handleResponse(id, neighbours.get(address));
+                        responser.handleResponse(id, connection);
                         break;
                     case DISCONNECT:
-                        connector.handleDisconnectResponse(responser, id, neighbours.get(address));
+                        connector.handleDisconnectResponse(responser, id, connection);
                 }
 
                 continue;
             }
 
+            /*
+             *  NOT RESPONSES
+             *
+             *  CAPTURE
+             *  CONNECT     - special
+             *  MESSAGE
+             *  DISCONNECT  - special
+             */
             switch (getType(data)) {
                 case CAPTURE:
-
+                    connector.acceptCapture(id, connection);
                     break;
                 case MESSAGE:
-                    messenger.handleMessage(data, neighbours.get(address));
-                    break;
-                case DISCONNECT:
-                    connector.handleDisconnect(data, address);
+                    messenger.handleMessage(data, connection);
             }
         }
     }
@@ -132,14 +149,36 @@ public class Node {
         }
     }
 
-    private boolean packetReceived(DatagramPacket receivePacket) {
+    private boolean packetReceiveFailed(DatagramPacket receivePacket) {
         try {
             socket.receive(receivePacket);
         }
         catch (IOException e) {
-            return false;
+            return true;
         }
-        return Math.random() > 0.01 && !filter(receivePacket.getData());
+        return Math.random() > 0.99 || filter(receivePacket.getData());
+    }
+
+    private boolean packetParent(byte[] data, InetSocketAddress address) {
+        if (!parenter.isParent(address))
+            return false;
+
+        if (getType(data) == DISCONNECT && !isResponse(data)) {
+            parenter.handleDisconnect(data);
+            return true;
+        }
+
+        if (getType(data) == CAPTURE && isResponse(data)) {
+            parenter.handleCaptureResponse(data);
+            return true;
+        }
+
+        if (getType(data) == CONNECT && isResponse(data)) {
+            parenter.handleConnectResponse(data);
+            return true;
+        }
+
+        return false;
     }
 
     private boolean packetSpecial(byte[] data, UUID id, InetSocketAddress address) {
