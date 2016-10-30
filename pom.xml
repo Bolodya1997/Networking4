@@ -17,6 +17,17 @@
                     <target>1.8</target>
                 </configuration>
             </plugin>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>ru.nsu.fit.bolodya.RootMain</mainClass>
+                        </manifest>
+                    </archive>
+                    <finalName>Chat root</finalName>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 

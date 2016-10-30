@@ -65,7 +65,7 @@ public class Node {
                 return;
         }
 
-        Runtime.getRuntime().addShutdownHook(new Thread(this::waitForCaptureLoop));
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdownInit));
 
         mainLoop();
     }
@@ -248,6 +248,18 @@ public class Node {
 
     //  Shutdown routines
 
+    private void shutdownInit() {
+        System.err.println("shutdownInit()");
+
+        if (parenter.getParentAddress() == null)
+            shutdown();
+
+        UUID id = Message.nextID();
+        InetSocketAddress parentAddress = parenter.getParentAddress();
+        messenger.addSystemMessage(id, new Message(capture(id), neighbours.get(parentAddress)));
+        waitForCaptureLoop();
+    }
+
     /*
      *  no more:
      *      messages from input
@@ -314,13 +326,14 @@ public class Node {
      *  3.  Send disconnect to the parent (and wait for response)
      */
     private void shutdown() {
+        System.err.println("shutdown()");
         messagesAndCapturesLoop();  //  1
 
         connector.sendDisconnect(parenter.getParentAddress());
         waitAllChildrenLoop();  //  2
 
         if (parenter.getParentAddress() == null)
-            return;
+            Thread.currentThread().stop();
 
         UUID id = Message.nextID();
         Connection parent = new Connection(socket, parenter.getParentAddress());
@@ -328,6 +341,8 @@ public class Node {
 
         neighbours.put(parent.getAddress(), parent);    //  for the correct isParent() call
         waitParentLoop();   //  3
+
+        Thread.currentThread().stop();
     }
 
     /*
@@ -337,6 +352,7 @@ public class Node {
      *      handle message
      */
     private void messagesAndCapturesLoop() {
+        System.err.println("messagesAndCapturesLoop()");
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty() || !captureSet.isEmpty()) {
             messages.values().forEach(Message::send);
@@ -388,6 +404,7 @@ public class Node {
      *      handle message response
      */
     private void waitAllChildrenLoop() {
+        System.err.println("waitAllChildrenLoop()");
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
             messages.values().forEach(Message::send);
@@ -430,6 +447,7 @@ public class Node {
      *      handle only disconnect response from parent
      */
     private void waitParentLoop() {
+        System.err.println("waitParentLoop()");
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
             messages.values().forEach(Message::send);
