@@ -1,6 +1,5 @@
 package ru.nsu.fit.bolodya.chat;
 
-import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -141,7 +140,7 @@ class Protocol {
 
 //  Work with metadata
 
-    static boolean filter(byte[] data) {
-        return data.length < META_LENGTH;
+    static boolean filter(int length) {
+        return length < META_LENGTH;
     }
 }

@@ -33,7 +33,7 @@ class Parenter {
     }
 
     boolean isParent(InetSocketAddress address) {
-        if (parentAddress != address)
+        if (parentAddress == null)
             return false;
 
         if (!neighbours.containsKey(address)) {
@@ -41,7 +41,7 @@ class Parenter {
             return false;
         }
 
-        return true;
+        return parentAddress == address;
     }
 
     void handleDisconnect(byte[] data) {

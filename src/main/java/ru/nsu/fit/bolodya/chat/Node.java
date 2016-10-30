@@ -59,9 +59,37 @@ public class Node {
         responser = new Responser(messages);
         parenter = new Parenter(neighbours, messenger, responser, parentAddress, this::shutdown);
 
+        if (parentAddress != null) {
+            connectionLoop();
+            if (neighbours.isEmpty())
+                return;
+        }
+
         Runtime.getRuntime().addShutdownHook(new Thread(this::waitForCaptureLoop));
 
         mainLoop();
+    }
+
+    private void connectionLoop() {
+        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
+        while (!messages.isEmpty()) {
+            messages.values().forEach(Message::send);
+            messenger.updateLastMessages(connector);
+
+            /*
+             *  failed on receive
+             *  skipped
+             *  bad message
+             */
+            if (packetReceiveFailed(receivePacket))
+                continue;
+
+            byte[] data = receivePacket.getData();
+            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
+
+            if (parenter.isParent(address) && getType(data) == CONNECT && getResponse(data) == RESPONSE)
+                parenter.handleConnectResponse(data);
+        }
     }
 
     private void mainLoop() {
@@ -83,7 +111,9 @@ public class Node {
             if (packetReceiveFailed(receivePacket))
                 continue;
 
-            byte[] data = receivePacket.getData();
+            int from = receivePacket.getOffset();
+            int to = receivePacket.getOffset() + receivePacket.getLength();
+            byte[] data = Arrays.copyOfRange(receivePacket.getData(), from, to);
             UUID id = getID(data);
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
@@ -138,7 +168,7 @@ public class Node {
         catch (IOException e) {
             return true;
         }
-        return Math.random() > 0.99 || filter(receivePacket.getData());
+        return Math.random() > 0.99 || filter(receivePacket.getLength());
     }
 
     private boolean packetParent(byte[] data, InetSocketAddress address) {
