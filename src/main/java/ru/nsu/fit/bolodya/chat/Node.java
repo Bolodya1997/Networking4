@@ -333,7 +333,7 @@ public class Node {
         waitAllChildrenLoop();  //  2
 
         if (parenter.getParentAddress() == null)
-            Thread.currentThread().stop();
+            Runtime.getRuntime().halt(0);
 
         UUID id = Message.nextID();
         Connection parent = new Connection(socket, parenter.getParentAddress());
@@ -342,7 +342,7 @@ public class Node {
         neighbours.put(parent.getAddress(), parent);    //  for the correct isParent() call
         waitParentLoop();   //  3
 
-        Thread.currentThread().stop();
+        Runtime.getRuntime().halt(0);
     }
 
     /*
