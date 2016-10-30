@@ -71,7 +71,7 @@ public class Node {
     }
 
     private void connectionLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
+        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
             messages.values().forEach(Message::send);
             messenger.updateLastMessages(connector);
@@ -84,7 +84,7 @@ public class Node {
             if (packetReceiveFailed(receivePacket))
                 continue;
 
-            byte[] data = receivePacket.getData();
+            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
             if (parenter.isParent(address) && getType(data) == CONNECT && getResponse(data) == RESPONSE)
@@ -93,7 +93,7 @@ public class Node {
     }
 
     private void mainLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
+        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (true) {
             try {
                 messageRoutine();
@@ -111,9 +111,7 @@ public class Node {
             if (packetReceiveFailed(receivePacket))
                 continue;
 
-            int from = receivePacket.getOffset();
-            int to = receivePacket.getOffset() + receivePacket.getLength();
-            byte[] data = Arrays.copyOfRange(receivePacket.getData(), from, to);
+            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
             UUID id = getID(data);
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
@@ -259,7 +257,7 @@ public class Node {
      *      decline on capture
      */
     private void waitForCaptureLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
+        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (true) {
             messages.values().forEach(Message::send);
             messenger.updateLastMessages(connector);
@@ -272,7 +270,7 @@ public class Node {
             if (packetReceiveFailed(receivePacket))
                 continue;
 
-            byte[] data = receivePacket.getData();
+            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
             UUID id = getID(data);
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
@@ -339,7 +337,7 @@ public class Node {
      *      handle message
      */
     private void messagesAndCapturesLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
+        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty() || !captureSet.isEmpty()) {
             messages.values().forEach(Message::send);
             messenger.updateLastMessages(connector);
@@ -352,7 +350,7 @@ public class Node {
             if (packetReceiveFailed(receivePacket))
                 continue;
 
-            byte[] data = receivePacket.getData();
+            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
             UUID id = getID(data);
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
@@ -390,7 +388,7 @@ public class Node {
      *      handle message response
      */
     private void waitAllChildrenLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
+        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
             messages.values().forEach(Message::send);
             messenger.updateLastMessages(connector);
@@ -403,7 +401,7 @@ public class Node {
             if (packetReceiveFailed(receivePacket))
                 continue;
 
-            byte[] data = receivePacket.getData();
+            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
             UUID id = getID(data);
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
@@ -432,7 +430,7 @@ public class Node {
      *      handle only disconnect response from parent
      */
     private void waitParentLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, 0);
+        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
             messages.values().forEach(Message::send);
             messenger.updateLastMessages(connector);
@@ -445,7 +443,7 @@ public class Node {
             if (packetReceiveFailed(receivePacket))
                 continue;
 
-            byte[] data = receivePacket.getData();
+            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
             InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
 
             if (parenter.isParent(address) && getType(data) == DISCONNECT && getResponse(data) == RESPONSE)

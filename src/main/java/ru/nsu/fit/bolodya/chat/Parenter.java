@@ -41,7 +41,7 @@ class Parenter {
             return false;
         }
 
-        return parentAddress == address;
+        return parentAddress.equals(address);
     }
 
     void handleDisconnect(byte[] data) {
