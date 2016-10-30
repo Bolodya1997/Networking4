@@ -1,9 +1,6 @@
 package ru.nsu.fit.bolodya.chat;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 class Message {
 
@@ -45,5 +42,9 @@ class Message {
 
     boolean isDelivered() {
         return connections.isEmpty();
+    }
+
+    static UUID nextID() {
+        return UUID.randomUUID();
     }
 }

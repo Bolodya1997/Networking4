@@ -51,16 +51,17 @@ class Parenter {
         oldParentID = getID(data);
         reconnecting = true;
 
+        neighbours.remove(parentAddress);
+
         parentAddress = getParent(data);
         if (parentAddress == null) {
             oldParent.send(response(DISCONNECT, oldParentID));
             reconnecting = false;
         }
-
-        neighbours.remove(parentAddress);
     }
 
     void handleCaptureAccept() {
+        neighbours.remove(parentAddress);
         shutdown.run();
     }
 
@@ -74,14 +75,16 @@ class Parenter {
             reconnecting = false;
         }
 
+        Connection parent = neighbours.get(parentAddress);
         if (disconnecting) {
-            //  TODO:   add capture request
+            UUID id = Message.nextID();
+            messages.put(id, new Message(capture(id), parent));
         }
 
-        responser.handleResponse(getID(data), neighbours.get(parentAddress));
+        responser.handleResponse(getID(data), parent);
     }
 
-    private UUID nextID() {
-        return UUID.randomUUID();   //  TODO:   fix it :(
+    InetSocketAddress getParentAddress() {
+        return parentAddress;
     }
 }

@@ -1,8 +1,8 @@
 package ru.nsu.fit.bolodya.chat;
 
+import java.lang.reflect.Array;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -12,11 +12,11 @@ import static ru.nsu.fit.bolodya.chat.Protocol.*;
 class Connector {
 
     private DatagramSocket socket;
-    private Collection<Message> messages;
+    private Map<UUID, Message> messages;
     private Map<InetSocketAddress, Connection> neighbours;
     private Set<Connection> captureSet;
 
-    Connector(DatagramSocket socket, Collection<Message> messages, Map<InetSocketAddress,
+    Connector(DatagramSocket socket, Map<UUID, Message> messages, Map<InetSocketAddress,
               Connection> neighbours, Set<Connection> captureSet) {
         this.socket = socket;
         this.messages = messages;
@@ -38,7 +38,7 @@ class Connector {
             Connection connection = new Connection(socket, address);
 
             neighbours.put(address, connection);
-            for (Message message : messages)
+            for (Message message : messages.values())
                 message.addConnection(connection);
         }
 
@@ -66,7 +66,23 @@ class Connector {
 
         neighbours.remove(address);
 
-        for (Message message : messages)
+        for (Message message : messages.values())
             message.removeConnection(connection);
+    }
+
+    void sendDisconnect(InetSocketAddress parentAddress) {
+        if (neighbours.isEmpty())
+            return;
+
+        Connection parent;
+        if (parentAddress == null)
+            parent = neighbours.values().iterator().next();     //  set first child as a parent for the others
+        else
+            parent = new Connection(socket, parentAddress);
+
+
+        UUID id = Message.nextID();
+        byte[] data = disconnect(id, parent.getAddress());
+        messages.put(id, new Message(data, neighbours.values()).removeConnection(parent));
     }
 }
