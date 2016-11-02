@@ -101,10 +101,10 @@ public class Node {
      *  5.  Connector routines          - variable
      *  6.  Messenger routines          - variable
      */
-    private void loop(boolean statement, boolean userInputAllowed, ParentRoutines parentRoutines,
+    private void loop(Statement statement, boolean userInputAllowed, ParentRoutines parentRoutines,
                       ConnectorRoutines connectorRoutines, MessengerRoutines messengerRoutines) {
         DatagramPacket packet = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
-        while (statement) {
+        while (statement.run()) {
             if (userInputAllowed) {
                 try {
                     userInputRoutine();
@@ -113,6 +113,7 @@ public class Node {
                 }
             }                                                   //  1
 
+            parent.updateCapture();     //  TODO:   move it into more appropriate place
             messenger.send();                                   //  2
 
             if (packetReceiveFailed(packet))
@@ -153,6 +154,10 @@ public class Node {
         return Math.random() > 0.99 || filter(receivePacket.getLength());
     }
 
+    private interface Statement {
+        boolean run();
+    }
+
     private interface ParentRoutines {
         boolean run(InetSocketAddress address, byte[] data);
     }
@@ -166,7 +171,7 @@ public class Node {
     }
 
     private void connectionLoop() {
-        boolean statement = !messenger.isEmpty();
+        Statement statement = () -> !messenger.isEmpty();
         boolean userInputAllowed = false;
         ParentRoutines parentRoutines = (address, data) -> {
             if (parent.isParent(address)) {
@@ -188,7 +193,7 @@ public class Node {
     private MessengerRoutines mainMessengerRoutines;
 
     private void mainLoop() {
-        boolean statement = !shutdownFlag;
+        Statement statement = () -> !shutdownFlag;
         boolean userInputAllowed = true;
         ParentRoutines parentRoutines = (address, data) -> {
             if (parent.isParent(address)) {
@@ -270,20 +275,20 @@ public class Node {
         shutdownFlag = true;
 
         if (parent.isRoot()) {
-            System.err.println("*** ROOT ***");
+//            System.err.println("*** ROOT ***");
             shutdown();
         }
 
-        System.err.println("*** NODE ***");
+//        System.err.println("*** NODE ***");
         parent.sendCapture();
         waitForCaptureLoop();
         shutdown();
     }
 
     private void waitForCaptureLoop() {
-        System.err.println("waitForCaptureLoop()");
+//        System.err.println("waitForCaptureLoop()");
 
-        boolean statement = !parent.isRoot() && !(captureFlag && captureSet.isEmpty());
+        Statement statement = () -> !parent.isRoot() && !(captureFlag && captureSet.isEmpty());
         boolean userInputAllowed = false;
         ParentRoutines parentRoutines = mainParentRoutines;
         ConnectorRoutines connectorRoutines = (address, data, id) -> {
@@ -308,7 +313,7 @@ public class Node {
      *  3.  Send disconnect to the parent (and wait for response)
      */
     private void shutdown() {
-        System.err.println("shutdown()");
+//        System.err.println("shutdown()");
         messagesLoop();  //  1
 
         connector.sendDisconnectToChildren(parent.getParentAddress());
@@ -324,9 +329,7 @@ public class Node {
     }
 
     private void messagesLoop() {
-        System.err.println("messagesLoop()");
-
-        boolean statement = !messenger.isEmpty();
+        Statement statement = () -> !messenger.isEmpty();
         boolean userInputAllowed = false;
         ParentRoutines parentRoutines = null;
         ConnectorRoutines connectorRoutines = (address, data, id) -> {
@@ -352,13 +355,13 @@ public class Node {
     }
 
     private void waitAllChildrenLoop() {
-        System.err.println("waitAllChildrenLoop()");
+//        System.err.println("waitAllChildrenLoop()");
 
         messagesLoop();
     }
 
     private void waitParentLoop() {
-        System.err.println("waitParentLoop()");
+//        System.err.println("waitParentLoop()");
 
         messagesLoop();
     }

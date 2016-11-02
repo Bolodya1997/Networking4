@@ -87,9 +87,17 @@ class Parent {
 
 //  Final disconnecting
 
+    private Message captureMessage;
+
+    void updateCapture() {
+        if (captureMessage != null && neighbours.containsKey(parentAddress))
+            captureMessage.addConnection(neighbours.get(parentAddress));
+    }
+
     void sendCapture() {
         UUID id = Message.nextID();
-        messenger.sendSystemMessage(id, new Message(capture(id), neighbours.get(parentAddress)));
+        captureMessage = new Message(capture(id), neighbours.get(parentAddress));
+        messenger.sendSystemMessage(id, captureMessage);
     }
 
     void handleCaptureAccept() {
