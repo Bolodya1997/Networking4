@@ -11,7 +11,6 @@ public class Node {
 
     private DatagramSocket socket;
 
-    private Map<UUID, Message> messages = new HashMap<>();
     private Map<InetSocketAddress, Connection> neighbours = new HashMap<>();
 
     private Set<Connection> captureSet = new HashSet<>();
@@ -39,7 +38,7 @@ public class Node {
         socket = new DatagramSocket(myPort);
         socket.setSoTimeout(100);
 
-        messenger = new Messenger(messages, neighbours.values(), this::printMessage);
+        messenger = new Messenger(neighbours.values(), this::printMessage);
 
         InetSocketAddress parentAddress;
 
@@ -50,7 +49,7 @@ public class Node {
             neighbours.put(parentAddress, parent);
 
             UUID id = Message.nextID();
-            messenger.addSystemMessage(id, new Message(connect(id), parent));
+            messenger.sendSystemMessage(id, new Message(connect(id), parent));
         } else {
             parentAddress = null;
         }
@@ -61,20 +60,42 @@ public class Node {
 
         if (parentAddress != null) {
             connectionLoop();
-            if (neighbours.isEmpty())
+            if (neighbours.isEmpty()) {
+                System.err.printf("Connect failed: %s\n", parentAddress);
                 return;
+            }
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::shutdownInit));
+        Runtime.getRuntime().addShutdownHook(new Thread(this::hardClose));
 
         mainLoop();
+    }
+
+    private void hardClose() {
+        try {
+            Thread.sleep(MAX_MESSAGE_LIFE);
+        }
+        catch (InterruptedException ignored) {}
+
+        System.err.println("*** HARD CLOSE ***");
+        Runtime.getRuntime().halt(-1);
+    }
+
+    /*
+     *  1.  Send messages
+     *  2.  Try to receive new message
+     *  3.
+     */
+    private void loopBase() {
+
     }
 
     private void connectionLoop() {
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
             messages.values().forEach(Message::send);
-            messenger.updateLastMessages(connector);
+            messenger.clearMessages(connector);
 
             /*
              *  failed on receive
@@ -100,8 +121,7 @@ public class Node {
             }
             catch (IOException ignored) {}
 
-            messages.values().forEach(Message::send);
-            messenger.updateLastMessages(connector);
+            sendMessages();
 
             /*
              *  failed on receive
@@ -157,6 +177,17 @@ public class Node {
             }
             catch (UnsupportedEncodingException ignored) {}
         }
+    }
+
+    private void sendMessages() {
+        Iterator<Map.Entry<UUID, Message>> iterator = messages.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Message message = iterator.next().getValue();
+            message.send();
+            if (message.isDelivered())
+                iterator.remove();
+        }
+        messenger.clearMessages(connector);
     }
 
     private boolean packetReceiveFailed(DatagramPacket receivePacket) {
@@ -251,12 +282,15 @@ public class Node {
     private void shutdownInit() {
         System.err.println("shutdownInit()");
 
-        if (parenter.getParentAddress() == null)
+        if (parenter.isRoot()) {
+            System.err.println("*** ROOT_0 ***");
             shutdown();
+        }
 
+        System.err.println("*** NODE ***");
         UUID id = Message.nextID();
         InetSocketAddress parentAddress = parenter.getParentAddress();
-        messenger.addSystemMessage(id, new Message(capture(id), neighbours.get(parentAddress)));
+        messenger.sendSystemMessage(id, new Message(capture(id), neighbours.get(parentAddress)));
         waitForCaptureLoop();
     }
 
@@ -269,10 +303,10 @@ public class Node {
      *      decline on capture
      */
     private void waitForCaptureLoop() {
+        System.err.println("waitForCaptureLoop()");
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (true) {
-            messages.values().forEach(Message::send);
-            messenger.updateLastMessages(connector);
+            sendMessages();
 
             /*
              *  failed on receive
@@ -294,6 +328,11 @@ public class Node {
              */
             if (packetParent(data, address))
                 continue;
+
+            if (parenter.isRoot()) {
+                System.err.println("*** ROOT_1 ***");
+                shutdown();
+            }
 
             /*
              *  CONNECT
@@ -332,12 +371,12 @@ public class Node {
         connector.sendDisconnect(parenter.getParentAddress());
         waitAllChildrenLoop();  //  2
 
-        if (parenter.getParentAddress() == null)
+        if (parenter.isRoot())
             Runtime.getRuntime().halt(0);
 
         UUID id = Message.nextID();
         Connection parent = new Connection(socket, parenter.getParentAddress());
-        messenger.addSystemMessage(id, new Message(disconnect(id, null), parent));
+        messenger.sendSystemMessage(id, new Message(disconnect(id, null), parent));
 
         neighbours.put(parent.getAddress(), parent);    //  for the correct isParent() call
         waitParentLoop();   //  3
@@ -355,8 +394,7 @@ public class Node {
         System.err.println("messagesAndCapturesLoop()");
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty() || !captureSet.isEmpty()) {
-            messages.values().forEach(Message::send);
-            messenger.updateLastMessages(connector);
+            sendMessages();
 
             /*
              *  failed on receive
@@ -407,8 +445,7 @@ public class Node {
         System.err.println("waitAllChildrenLoop()");
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
-            messages.values().forEach(Message::send);
-            messenger.updateLastMessages(connector);
+            sendMessages();
 
             /*
              *  failed on receive
@@ -450,8 +487,7 @@ public class Node {
         System.err.println("waitParentLoop()");
         DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
         while (!messages.isEmpty()) {
-            messages.values().forEach(Message::send);
-            messenger.updateLastMessages(connector);
+            sendMessages();
 
             /*
              *  failed on receive

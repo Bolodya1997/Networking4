@@ -15,7 +15,9 @@ class Protocol {
     static final int MAX_DATA = 1024 * 1024;
     static final int MAX_PACKET = MAX_DATA + META_LENGTH;
 
-    static final long MAX_MESSAGE_LIFE = 1000;  //  in milliseconds
+    static final long MESSAGE_LIFE = 1000;  //  in milliseconds
+    static final long MAX_MESSAGE_LIFE = 3 * MESSAGE_LIFE;
+    static final long TIMEOUT = MESSAGE_LIFE / 10;
 
 //  TYPE = 0b0000RRTT
 
@@ -27,9 +29,8 @@ class Protocol {
 
     private static final byte RESPONSE_MASK = 0b1100;
     static final byte NO_RESPONSE           = 0b0000;
-    static final byte RESPONSE              = 0b0100;
-    static final byte ACCEPT                = 0b1000;
-    static final byte DECLINE               = 0b1100;
+    static final byte ACCEPT                = 0b0100;
+    static final byte DECLINE               = 0b1000;
 
 //  Different message types
 
@@ -79,10 +80,6 @@ class Protocol {
 
     private static byte[] baseResponse(byte responseType, byte type, UUID id) {
         return baseMessage((byte) (type | responseType), id, null);
-    }
-
-    static byte[] response(byte type, UUID id) {
-        return baseResponse(type, RESPONSE, id);
     }
 
     static byte[] accept(byte type, UUID id) {

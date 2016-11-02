@@ -64,6 +64,7 @@ class Connector {
     void lostConnection(Connection connection) {
         InetSocketAddress address = connection.getAddress();
 
+        captureSet.remove(connection);
         neighbours.remove(address);
 
         messenger.removeConnection(connection);
@@ -81,6 +82,6 @@ class Connector {
 
         UUID id = Message.nextID();
         byte[] data = disconnect(id, parent.getAddress());
-        messenger.addSystemMessage(id, new Message(data, neighbours.values()).removeConnection(parent));
+        messenger.sendSystemMessage(id, new Message(data, neighbours.values()).removeConnection(parent));
     }
 }

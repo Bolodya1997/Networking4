@@ -36,12 +36,23 @@ class Parenter {
         if (parentAddress == null)
             return false;
 
-        if (!neighbours.containsKey(address)) {
-            parentAddress = null;
-            return false;
+        if (parentAddress.equals(address)) {
+            if (!neighbours.containsKey(address)) {
+                parentAddress = null;
+                return false;
+            }
+
+            return true;
         }
 
-        return parentAddress.equals(address);
+        return false;
+    }
+
+    boolean isRoot() {
+        if (!neighbours.containsKey(parentAddress))
+            parentAddress = null;
+
+        return parentAddress == null;
     }
 
     void handleDisconnect(byte[] data) {
@@ -76,7 +87,7 @@ class Parenter {
         Connection parent = neighbours.get(parentAddress);
         if (disconnecting) {
             UUID id = Message.nextID();
-            messenger.addSystemMessage(id, new Message(capture(id), parent));
+            messenger.sendSystemMessage(id, new Message(capture(id), parent));
         }
 
         responser.handleResponse(getID(data), parent);

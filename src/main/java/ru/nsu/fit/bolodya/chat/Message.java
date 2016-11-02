@@ -2,10 +2,15 @@ package ru.nsu.fit.bolodya.chat;
 
 import java.util.*;
 
+import static ru.nsu.fit.bolodya.chat.Protocol.*;
+
 class Message {
 
     private Set<Connection> connections = new HashSet<>();
     private byte[] data;
+
+    private long createTime = System.currentTimeMillis();
+    private long lastUpdateTime = createTime;
 
     Message(byte[] data, Connection connection) {
         this.data = Arrays.copyOf(data, data.length);
@@ -36,12 +41,22 @@ class Message {
         return this;
     }
 
-    void close(Connector connector) {
-        connections.forEach(connector::lostConnection);
+    void lost(Connector connector) {
+        for (Connection connection : connections)
+            connector.lostConnection(connection);
     }
 
     boolean isDelivered() {
         return connections.isEmpty();
+    }
+
+    void update() {
+        lastUpdateTime = System.currentTimeMillis();
+    }
+
+    boolean outOfDate() {
+        long curTime = System.currentTimeMillis();
+        return curTime - lastUpdateTime > MESSAGE_LIFE || curTime - createTime > MAX_MESSAGE_LIFE;
     }
 
     static UUID nextID() {
