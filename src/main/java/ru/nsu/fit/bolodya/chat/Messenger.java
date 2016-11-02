@@ -16,7 +16,6 @@ class Messenger {
     private long lastSendTime;
 
     private Map<UUID, Message> messages = new HashMap<>();
-    private int messageCount;
 
     private Map<UUID, Long> lastMessages = new HashMap<>();
 
@@ -28,6 +27,8 @@ class Messenger {
     void setConnector(Connector connector) {
         this.connector = connector;
     }
+
+//  Send messages
 
     void send() {
         long curTime = System.currentTimeMillis();
@@ -45,8 +46,10 @@ class Messenger {
         while (iterator.hasNext()) {
             Message message = iterator.next().getValue();
 
-            if (message.isDelivered())
+            if (message.isDelivered()) {
                 iterator.remove();
+                continue;
+            }
 
             if (message.outOfDate()) {
                 iterator.remove();
@@ -55,25 +58,30 @@ class Messenger {
         }
     }
 
-    void handleMessage(byte[] data, Connection connection) {
+    void acceptMessage(byte[] data, Connection connection) {
+        UUID id = getID(data);
+
         clearLastMessages();
-        if (lastMessages.containsKey(getID(data))) {
-            connection.send(accept(MESSAGE, getID(data)));
+        if (lastMessages.containsKey(id)) {
+            connection.send(accept(MESSAGE, id));
             return;
         }
 
-        if (messageCount >= LIMIT) {
-            connection.send(decline(MESSAGE, getID(data)));
+        if (messages.size() >= LIMIT) {
+            connection.send(decline(MESSAGE, id));
             return;
         }
 
-        connection.send(accept(MESSAGE, getID(data)));
+        connection.send(accept(MESSAGE, id));
 
         printer.print(data);
 
-        ++messageCount;
-        messages.put(getID(data), new Message(data, neighbours).removeConnection(connection));
-        lastMessages.put(getID(data), System.currentTimeMillis());
+        messages.put(id, new Message(data, neighbours).removeConnection(connection));
+        lastMessages.put(id, System.currentTimeMillis());
+    }
+
+    void declineMessage(byte[] data, Connection connection) {
+        connection.send(decline(MESSAGE, getID(data)));
     }
 
     private void clearLastMessages() {
@@ -98,6 +106,22 @@ class Messenger {
         messages.put(id, message.send());
     }
 
+//  Handle responses
+
+    void handleAccept(UUID id, Connection connection) {
+        Message message = messages.get(id);
+        if (message != null)
+            message.removeConnection(connection);
+    }
+
+    void handleDecline(UUID id) {
+        Message message = messages.get(id);
+        if (message != null)
+            message.update();
+    }
+
+//  Other
+
     void addConnection(Connection connection) {
         for (Message message: messages.values())
             message.addConnection(connection);
@@ -106,5 +130,9 @@ class Messenger {
     void removeConnection(Connection connection) {
         for (Message message : messages.values())
             message.removeConnection(connection);
+    }
+
+    boolean isEmpty() {
+        return messages.isEmpty();
     }
 }

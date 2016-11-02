@@ -25,6 +25,8 @@ class Connector {
         this.messenger = messenger;
     }
 
+//  CAPTURE
+
     void acceptCapture(UUID id, Connection connection) {
         captureSet.add(connection);
         connection.send(accept(CAPTURE, id));
@@ -34,7 +36,16 @@ class Connector {
         connection.send(decline(CAPTURE, id));
     }
 
-    void handleConnect(UUID id, InetSocketAddress address) {
+//  CONNECT
+
+    void sendConnect(UUID id, InetSocketAddress address) {
+        Connection connection = new Connection(socket, address);
+        neighbours.put(address, connection);
+
+        messenger.sendSystemMessage(id, new Message(connect(id), connection));
+    }
+
+    void acceptConnect(UUID id, InetSocketAddress address) {
         if (!neighbours.containsKey(address)) {
             Connection connection = new Connection(socket, address);
 
@@ -42,24 +53,56 @@ class Connector {
             messenger.addConnection(connection);
         }
 
-        neighbours.get(address).send(response(CONNECT, id));
+        neighbours.get(address).send(accept(CONNECT, id));
     }
 
-    void handleDisconnect(byte[] data, InetSocketAddress address) {
+    void declineConnect(UUID id, InetSocketAddress address) {
+        Connection connection = new Connection(socket, address);
+        connection.send(decline(CONNECT, id));
+    }
+
+//  DISCONNECT
+
+    void acceptDisconnect(UUID id, InetSocketAddress address) {
         Connection connection = neighbours.get(address);
         if (connection == null)
             connection = new Connection(socket, address);
 
         captureSet.remove(connection);
 
-        connection.send(response(DISCONNECT, getID(data)));
+        connection.send(accept(DISCONNECT, id));
         neighbours.remove(address);
     }
 
-    void handleDisconnectResponse(Responser responser, UUID id, Connection connection) {
-        responser.handleResponse(id, connection);
-        neighbours.remove(connection.getAddress());
+    void handleDisconnectAccept(UUID id, Connection connection) {
+        messenger.handleAccept(id, connection);
     }
+
+//  Final disconnecting
+
+    private Connection parent;
+
+    void sendDisconnectToChildren(InetSocketAddress parentAddress) {
+        if (neighbours.isEmpty())
+            return;
+
+        Connection parent = neighbours.get(parentAddress);
+        if (parent == null)
+            parent = neighbours.values().iterator().next();
+
+        this.parent = parent;
+
+        UUID id = Message.nextID();
+        byte[] data = disconnect(id, parent.getAddress());
+        messenger.sendSystemMessage(id, new Message(data, neighbours.values()).removeConnection(parent));
+    }
+
+    void sendDisconnectToParent() {
+        UUID id = Message.nextID();
+        messenger.sendSystemMessage(id, new Message(disconnect(id, null), parent));
+    }
+
+//  Lost connection
 
     void lostConnection(Connection connection) {
         InetSocketAddress address = connection.getAddress();
@@ -68,20 +111,5 @@ class Connector {
         neighbours.remove(address);
 
         messenger.removeConnection(connection);
-    }
-
-    void sendDisconnect(InetSocketAddress parentAddress) {
-        if (neighbours.isEmpty())
-            return;
-
-        Connection parent;
-        if (parentAddress == null)
-            parent = neighbours.values().iterator().next();     //  set first child as a parent for the others
-        else
-            parent = new Connection(socket, parentAddress);
-
-        UUID id = Message.nextID();
-        byte[] data = disconnect(id, parent.getAddress());
-        messenger.sendSystemMessage(id, new Message(data, neighbours.values()).removeConnection(parent));
     }
 }

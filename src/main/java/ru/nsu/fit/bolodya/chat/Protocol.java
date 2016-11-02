@@ -17,7 +17,7 @@ class Protocol {
 
     static final long MESSAGE_LIFE = 1000;  //  in milliseconds
     static final long MAX_MESSAGE_LIFE = 3 * MESSAGE_LIFE;
-    static final long TIMEOUT = MESSAGE_LIFE / 10;
+    static final int TIMEOUT = (int) (MESSAGE_LIFE / 10);
 
 //  TYPE = 0b0000RRTT
 

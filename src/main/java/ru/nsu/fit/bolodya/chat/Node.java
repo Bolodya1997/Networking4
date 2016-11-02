@@ -17,8 +17,10 @@ public class Node {
 
     private Messenger messenger;
     private Connector connector;
-    private Responser responser;
-    private Parenter parenter;
+    private Parent parent;
+
+    private boolean shutdownFlag;
+    private boolean captureFlag;
 
     static {
         try {
@@ -36,40 +38,49 @@ public class Node {
 
     public Node(int myPort, String hostName, int port) throws SocketException, UnknownHostException {
         socket = new DatagramSocket(myPort);
-        socket.setSoTimeout(100);
+        socket.setSoTimeout(TIMEOUT);
 
         messenger = new Messenger(neighbours.values(), this::printMessage);
+        connector = new Connector(socket, neighbours, captureSet, messenger);
+        messenger.setConnector(connector);
 
         InetSocketAddress parentAddress;
 
         if (hostName != null) {
             parentAddress = new InetSocketAddress(InetAddress.getByName(hostName), port);
 
-            Connection parent = new Connection(socket, parentAddress);
-            neighbours.put(parentAddress, parent);
-
             UUID id = Message.nextID();
-            messenger.sendSystemMessage(id, new Message(connect(id), parent));
+            connector.sendConnect(id, parentAddress);
         } else {
             parentAddress = null;
         }
 
-        connector = new Connector(socket, neighbours, captureSet, messenger);
-        responser = new Responser(messages);
-        parenter = new Parenter(neighbours, messenger, responser, parentAddress, this::shutdown);
+        parent = new Parent(neighbours, messenger, connector, parentAddress, () -> captureFlag = true);
 
         if (parentAddress != null) {
             connectionLoop();
             if (neighbours.isEmpty()) {
-                System.err.printf("Connect failed: %s\n", parentAddress);
+                System.err.printf("Connection failed: %s\n", parentAddress);
                 return;
             }
+
+            System.err.printf("Connection successed: %s\n", parentAddress);
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::shutdownInit));
         Runtime.getRuntime().addShutdownHook(new Thread(this::hardClose));
 
         mainLoop();
+    }
+
+    private void printMessage(byte[] data) {
+        String message = "";
+        try {
+            message = new String(getData(data), "UTF8");
+        }
+        catch (UnsupportedEncodingException ignored) {}
+
+        System.out.printf("%s:  %s\n", getID(data), message);
     }
 
     private void hardClose() {
@@ -83,93 +94,46 @@ public class Node {
     }
 
     /*
-     *  1.  Send messages
-     *  2.  Try to receive new message
-     *  3.
+     *  1.  User input                  - optional
+     *  2.  Send messages               - constant
+     *  3.  Try to receive new message  - constant
+     *  4.  Parent routines             - variable
+     *  5.  Connector routines          - variable
+     *  6.  Messenger routines          - variable
      */
-    private void loopBase() {
+    private void loop(boolean statement, boolean userInputAllowed, ParentRoutines parentRoutines,
+                      ConnectorRoutines connectorRoutines, MessengerRoutines messengerRoutines) {
+        DatagramPacket packet = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
+        while (statement) {
+            if (userInputAllowed) {
+                try {
+                    userInputRoutine();
+                }
+                catch (IOException ignored) {
+                }
+            }                                                   //  1
 
-    }
+            messenger.send();                                   //  2
 
-    private void connectionLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
-        while (!messages.isEmpty()) {
-            messages.values().forEach(Message::send);
-            messenger.clearMessages(connector);
+            if (packetReceiveFailed(packet))
+                continue;                                       //  3
 
-            /*
-             *  failed on receive
-             *  skipped
-             *  bad message
-             */
-            if (packetReceiveFailed(receivePacket))
-                continue;
+            InetSocketAddress address = (InetSocketAddress) packet.getSocketAddress();
+            byte[] data = Arrays.copyOf(packet.getData(), packet.getLength());
+            if (parentRoutines != null && parentRoutines.run(address, data))
+                continue;                                       //  4
 
-            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
-            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
-
-            if (parenter.isParent(address) && getType(data) == CONNECT && getResponse(data) == RESPONSE)
-                parenter.handleConnectResponse(data);
-        }
-    }
-
-    private void mainLoop() {
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
-        while (true) {
-            try {
-                messageRoutine();
-            }
-            catch (IOException ignored) {}
-
-            sendMessages();
-
-            /*
-             *  failed on receive
-             *  skipped
-             *  bad message
-             */
-            if (packetReceiveFailed(receivePacket))
-                continue;
-
-            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
             UUID id = getID(data);
-            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
-
-            /*
-             *  from parent +
-             *      DISCONNECT
-             *      CAPTURE + RESPONSE
-             *      CONNECT + RESPONSE
-             */
-            if (packetParent(data, address))
-                continue;
-
-            /*
-             *  CONNECT
-             *  DISCONNECT
-             *  not neighbour
-             */
-            if (packetSpecial(data, id, address))
-                continue;
+            if (connectorRoutines != null && connectorRoutines.run(address, data, id))
+                continue;                                       //  5
 
             Connection connection = neighbours.get(address);
-
-            /*
-             *  MESSAGE + RESPONSE
-             *  DISCONNECT + RESPONSE
-             */
-            if (packetResponse(data, id, connection))
-                continue;
-
-            /*
-             *  CAPTURE
-             *  MESSAGE
-             */
-            packet(data, id, connection);
+            if (messengerRoutines != null)
+                messengerRoutines.run(connection, data, id);    //  6
         }
     }
 
-    private void messageRoutine() throws IOException {
+    private void userInputRoutine() throws IOException {
         Scanner scanner = new Scanner(System.in);
         if (System.in.available() > 0) {
             try {
@@ -177,17 +141,6 @@ public class Node {
             }
             catch (UnsupportedEncodingException ignored) {}
         }
-    }
-
-    private void sendMessages() {
-        Iterator<Map.Entry<UUID, Message>> iterator = messages.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Message message = iterator.next().getValue();
-            message.send();
-            if (message.isDelivered())
-                iterator.remove();
-        }
-        messenger.clearMessages(connector);
     }
 
     private boolean packetReceiveFailed(DatagramPacket receivePacket) {
@@ -200,308 +153,213 @@ public class Node {
         return Math.random() > 0.99 || filter(receivePacket.getLength());
     }
 
-    private boolean packetParent(byte[] data, InetSocketAddress address) {
-        if (!parenter.isParent(address))
-            return false;
-
-        if (getType(data) == DISCONNECT && getResponse(data) == NO_RESPONSE) {
-            parenter.handleDisconnect(data);
-            return true;
-        }
-
-        if (getType(data) == CAPTURE) {
-            if (getResponse(data) == ACCEPT) {
-                parenter.handleCaptureAccept();
-                return true;
-            }
-            if (getResponse(data) == DECLINE) {
-                parenter.handleCaptureDecline();
-                return true;
-            }
-        }
-
-        if (getType(data) == CONNECT && getResponse(data) == RESPONSE) {
-            parenter.handleConnectResponse(data);
-            return true;
-        }
-
-        return false;
+    private interface ParentRoutines {
+        boolean run(InetSocketAddress address, byte[] data);
     }
 
-    private boolean packetSpecial(byte[] data, UUID id, InetSocketAddress address) {
+    private interface ConnectorRoutines {
+        boolean run(InetSocketAddress address, byte[] data, UUID id);
+    }
+
+    private interface MessengerRoutines {
+        void run(Connection connection, byte[] data, UUID id);
+    }
+
+    private void connectionLoop() {
+        boolean statement = !messenger.isEmpty();
+        boolean userInputAllowed = false;
+        ParentRoutines parentRoutines = (address, data) -> {
+            if (parent.isParent(address)) {
+                if (getType(data) == CONNECT && getResponse(data) == ACCEPT) {
+                    parent.handleConnectAccept(getID(data));
+                    return true;
+                }
+            }
+
+            return false;
+        };
+        ConnectorRoutines connectorRoutines = null;
+        MessengerRoutines messengerRoutines = null;
+
+        loop(statement, userInputAllowed, parentRoutines, connectorRoutines, messengerRoutines);
+    }
+
+    private ParentRoutines mainParentRoutines;
+    private MessengerRoutines mainMessengerRoutines;
+
+    private void mainLoop() {
+        boolean statement = !shutdownFlag;
+        boolean userInputAllowed = true;
+        ParentRoutines parentRoutines = (address, data) -> {
+            if (parent.isParent(address)) {
+                if (getType(data) == DISCONNECT && getResponse(data) == NO_RESPONSE) {
+                    parent.handleDisconnect(data);
+                    return true;
+                }
+
+                if (getType(data) == CAPTURE && getResponse(data) == ACCEPT) {
+                    parent.handleCaptureAccept();
+                    return true;
+                }
+            }
+
+            if (parent.isNewParent(address)) {
+                if (getType(data) == CONNECT && getResponse(data) == ACCEPT) {
+                    parent.handleConnectAccept(getID(data));
+                    return true;
+                }
+            }
+
+            return false;
+        };
+        ConnectorRoutines connectorRoutines = (address, data, id) -> {
+            if (acceptConnectDisconnect(address, data, id))
+                return true;
+
+            if (getType(data) == CAPTURE && getResponse(data) == NO_RESPONSE) {
+                connector.acceptCapture(id, neighbours.get(address));
+                return true;
+            }
+
+            return false;
+        };
+        MessengerRoutines messengerRoutines = (connection, data, id) -> {
+            if (getType(data) == MESSAGE && getResponse(data) == NO_RESPONSE) {
+                messenger.acceptMessage(data, connection);
+                return;
+            }
+
+            handleAcceptDecline(connection, data, id);
+        };
+
+        mainParentRoutines = parentRoutines;
+        mainMessengerRoutines = messengerRoutines;
+
+        loop(statement, userInputAllowed, parentRoutines, connectorRoutines, messengerRoutines);
+    }
+
+    private boolean acceptConnectDisconnect(InetSocketAddress address, byte[] data, UUID id) {
         if (getType(data) == CONNECT && getResponse(data) == NO_RESPONSE) {
-            connector.handleConnect(id, address);
+            connector.acceptConnect(id, address);
             return true;
         }
 
         if (getType(data) == DISCONNECT && getResponse(data) == NO_RESPONSE) {
-            connector.handleDisconnect(data, address);
+            connector.acceptDisconnect(id, address);
             return true;
         }
 
         return !neighbours.containsKey(address);
     }
 
-    private boolean packetResponse(byte[] data, UUID id, Connection connection) {
-        if (getResponse(data) == NO_RESPONSE)
-            return false;
-
-        switch (getType(data)) {
-            case MESSAGE:
-                responser.handleResponse(id, connection);
-                break;
-            case DISCONNECT:
-                connector.handleDisconnectResponse(responser, id, connection);
+    private void handleAcceptDecline(Connection connection, byte[] data, UUID id) {
+        if (getResponse(data) == ACCEPT) {
+            messenger.handleAccept(id, connection);
+            return;
         }
 
-        return true;
+        if (getResponse(data) == DECLINE)
+            messenger.handleDecline(id);
     }
 
-    private void packet(byte[] data, UUID id, Connection connection) {
-        switch (getType(data)) {
-            case CAPTURE:
-                connector.acceptCapture(id, connection);
-                break;
-            case MESSAGE:
-                messenger.handleMessage(data, connection);
-        }
-    }
-
-    private void printMessage(byte[] data) {
-        String message = "";
-        try {
-            message = new String(getData(data), "UTF8");
-        }
-        catch (UnsupportedEncodingException ignored) {}
-
-        System.out.printf("%s:  %s\n", getID(data), message);
-    }
-
-    //  Shutdown routines
+//  Shutdown routines
 
     private void shutdownInit() {
         System.err.println("shutdownInit()");
 
-        if (parenter.isRoot()) {
-            System.err.println("*** ROOT_0 ***");
+        shutdownFlag = true;
+
+        if (parent.isRoot()) {
+            System.err.println("*** ROOT ***");
             shutdown();
         }
 
         System.err.println("*** NODE ***");
-        UUID id = Message.nextID();
-        InetSocketAddress parentAddress = parenter.getParentAddress();
-        messenger.sendSystemMessage(id, new Message(capture(id), neighbours.get(parentAddress)));
+        parent.sendCapture();
         waitForCaptureLoop();
+        shutdown();
     }
 
-    /*
-     *  no more:
-     *      messages from input
-     *      accept on capture
-     *
-     *  now:
-     *      decline on capture
-     */
     private void waitForCaptureLoop() {
         System.err.println("waitForCaptureLoop()");
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
-        while (true) {
-            sendMessages();
 
-            /*
-             *  failed on receive
-             *  skipped
-             *  bad message
-             */
-            if (packetReceiveFailed(receivePacket))
-                continue;
+        boolean statement = !parent.isRoot() && !(captureFlag && captureSet.isEmpty());
+        boolean userInputAllowed = false;
+        ParentRoutines parentRoutines = mainParentRoutines;
+        ConnectorRoutines connectorRoutines = (address, data, id) -> {
+            if (acceptConnectDisconnect(address, data, id))
+                return true;
 
-            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
-            UUID id = getID(data);
-            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
-
-            /*
-             *  from parent +
-             *      DISCONNECT
-             *      CAPTURE + RESPONSE
-             *      CONNECT + RESPONSE
-             */
-            if (packetParent(data, address))
-                continue;
-
-            if (parenter.isRoot()) {
-                System.err.println("*** ROOT_1 ***");
-                shutdown();
+            if (getType(data) == CAPTURE && getResponse(data) == NO_RESPONSE) {
+                connector.declineCapture(id, neighbours.get(address));
+                return true;
             }
 
-            /*
-             *  CONNECT
-             *  DISCONNECT
-             *  not neighbour
-             */
-            if (packetSpecial(data, id, address))
-                continue;
+            return false;
+        };
+        MessengerRoutines messengerRoutines = mainMessengerRoutines;
 
-            Connection connection = neighbours.get(address);
-
-            /*
-             *  MESSAGE + RESPONSE
-             *  DISCONNECT + RESPONSE
-             */
-            if (packetResponse(data, id, connection))
-                continue;
-
-            /*
-             *  CAPTURE
-             *  MESSAGE
-             */
-            packet(data, id, connection);
-        }
+        loop(statement, userInputAllowed, parentRoutines, connectorRoutines, messengerRoutines);
     }
 
     /*
-     *  1.  Send all messages and wait for all captures fell
+     *  1.  Wait for all messages to deliever
      *  2.  Send disconnect to all children (and wait for responses)
      *  3.  Send disconnect to the parent (and wait for response)
      */
     private void shutdown() {
         System.err.println("shutdown()");
-        messagesAndCapturesLoop();  //  1
+        messagesLoop();  //  1
 
-        connector.sendDisconnect(parenter.getParentAddress());
+        connector.sendDisconnectToChildren(parent.getParentAddress());
         waitAllChildrenLoop();  //  2
 
-        if (parenter.isRoot())
+        if (parent.isRoot())
             Runtime.getRuntime().halt(0);
 
-        UUID id = Message.nextID();
-        Connection parent = new Connection(socket, parenter.getParentAddress());
-        messenger.sendSystemMessage(id, new Message(disconnect(id, null), parent));
-
-        neighbours.put(parent.getAddress(), parent);    //  for the correct isParent() call
+        connector.sendDisconnectToParent();
         waitParentLoop();   //  3
 
         Runtime.getRuntime().halt(0);
     }
 
-    /*
-     *  no more:
-     *      packets from parent
-     *      handle connect
-     *      handle message
-     */
-    private void messagesAndCapturesLoop() {
-        System.err.println("messagesAndCapturesLoop()");
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
-        while (!messages.isEmpty() || !captureSet.isEmpty()) {
-            sendMessages();
+    private void messagesLoop() {
+        System.err.println("messagesLoop()");
 
-            /*
-             *  failed on receive
-             *  skipped
-             *  bad message
-             */
-            if (packetReceiveFailed(receivePacket))
-                continue;
+        boolean statement = !messenger.isEmpty();
+        boolean userInputAllowed = false;
+        ParentRoutines parentRoutines = null;
+        ConnectorRoutines connectorRoutines = (address, data, id) -> {
+            if (getType(data) == DISCONNECT && getResponse(data) == NO_RESPONSE)
+                connector.acceptDisconnect(id, address);
 
-            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
-            UUID id = getID(data);
-            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
-
-            /*
-             *  DISCONNECT
-             */
-            if (getType(data) == DISCONNECT && getResponse(data) == NO_RESPONSE) {
-                connector.handleDisconnect(data, address);
-                continue;
+            if (getType(data) == CAPTURE && getResponse(data) == NO_RESPONSE) {
+                connector.declineCapture(id, neighbours.get(address));
+                return true;
             }
 
-            if (!neighbours.containsKey(address))
-                continue;
+            return false;
+        };
+        MessengerRoutines messengerRoutines = (connection, data, id) -> {
+            if (getType(data) == MESSAGE && getResponse(data) == NO_RESPONSE) {
+                messenger.declineMessage(data, connection);
+            }
 
-            Connection connection = neighbours.get(address);
+            handleAcceptDecline(connection, data, id);
+        };
 
-            /*
-             *  MESSAGE + RESPONSE
-             *  DISCONNECT + RESPONSE
-             */
-            if (packetResponse(data, id, connection))
-                continue;
-
-            /*
-             *  CAPTURE
-             */
-            if (getType(data) == CAPTURE && getResponse(data) == NO_RESPONSE)
-                connector.declineCapture(id, connection);
-        }
+        loop(statement, userInputAllowed, parentRoutines, connectorRoutines, messengerRoutines);
     }
 
-    /*
-     *  no more:
-     *      handle disconnect
-     *      handle message response
-     */
     private void waitAllChildrenLoop() {
         System.err.println("waitAllChildrenLoop()");
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
-        while (!messages.isEmpty()) {
-            sendMessages();
 
-            /*
-             *  failed on receive
-             *  skipped
-             *  bad message
-             */
-            if (packetReceiveFailed(receivePacket))
-                continue;
-
-            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
-            UUID id = getID(data);
-            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
-
-            if (!neighbours.containsKey(address))
-                continue;
-
-            Connection connection = neighbours.get(address);
-
-            /*
-             *  DISCONNECT + RESPONSE
-             */
-            if (getType(data) == DISCONNECT && getResponse(data) == RESPONSE) {
-                connector.handleDisconnectResponse(responser, id, connection);
-                continue;
-            }
-
-            /*
-             *  CAPTURE
-             */
-            if (getType(data) == CAPTURE && getResponse(data) == NO_RESPONSE)
-                connector.declineCapture(id, connection);
-        }
+        messagesLoop();
     }
-    /*
-     *  now:
-     *      handle only disconnect response from parent
-     */
+
     private void waitParentLoop() {
         System.err.println("waitParentLoop()");
-        DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET], 0, MAX_PACKET);
-        while (!messages.isEmpty()) {
-            sendMessages();
 
-            /*
-             *  failed on receive
-             *  skipped
-             *  bad message
-             */
-            if (packetReceiveFailed(receivePacket))
-                continue;
-
-            byte[] data = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
-            InetSocketAddress address = (InetSocketAddress) receivePacket.getSocketAddress();
-
-            if (parenter.isParent(address) && getType(data) == DISCONNECT && getResponse(data) == RESPONSE)
-                return;
-        }
+        messagesLoop();
     }
 }
