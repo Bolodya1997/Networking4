@@ -41,7 +41,7 @@ public class Main {
                 String host = commandLine.getOptionValue("h");
                 Integer parentPort = Integer.decode(commandLine.getOptionValue("pp"));
 
-                System.out.printf("Node on: %d\nParent is: %s:%d\n", port, host, parentPort);
+                System.out.printf("Node on: %d\n", port);
                 new Node(port, host, parentPort);
             }
         }

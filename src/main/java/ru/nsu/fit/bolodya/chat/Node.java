@@ -80,7 +80,7 @@ public class Node {
         }
         catch (UnsupportedEncodingException ignored) {}
 
-        System.out.printf("%s:  %s\n", getID(data), message);
+        System.out.println(message);
     }
 
     private void hardClose() {
@@ -138,7 +138,8 @@ public class Node {
         Scanner scanner = new Scanner(System.in);
         if (System.in.available() > 0) {
             try {
-                messenger.sendMessage(message(Message.nextID(), scanner.next().getBytes("UTF8")));
+                String message = String.format("%s : %s\n", socket.getLocalSocketAddress(), scanner.next());
+                messenger.sendMessage(message(Message.nextID(), message.getBytes("UTF8")));
             }
             catch (UnsupportedEncodingException ignored) {}
         }
