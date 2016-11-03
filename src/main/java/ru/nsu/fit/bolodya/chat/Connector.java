@@ -86,12 +86,15 @@ class Connector {
             parent = neighbours.values().iterator().next();
 
         this.parent = parent;
-        if (neighbours.size() == 1)
-            return;
 
         UUID id = Message.nextID();
-        byte[] data = disconnect(id, parent.getAddress());
-        messenger.sendSystemMessage(id, new Message(data, neighbours.values()).removeConnection(parent));
+        if (neighbours.size() > 1) {
+            byte[] data = disconnect(id, parent.getAddress());
+            messenger.sendSystemMessage(id, new Message(data, neighbours.values()).removeConnection(parent));
+        } else {
+            byte[] data = disconnect(id, null);
+            messenger.sendSystemMessage(id, new Message(data, parent));
+        }
     }
 
     void sendDisconnectToParent() {

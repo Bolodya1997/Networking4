@@ -273,12 +273,9 @@ public class Node {
     private void shutdownInit() {
         shutdownFlag = true;
 
-        if (parent.isRoot()) {
-            System.err.println("*** ROOT ***");
+        if (parent.isRoot())
             shutdown();
-        }
 
-        System.err.println("*** NODE ***");
         parent.sendCapture();
         waitForCaptureLoop();
         shutdown();
