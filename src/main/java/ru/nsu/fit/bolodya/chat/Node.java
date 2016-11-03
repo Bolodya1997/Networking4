@@ -80,7 +80,7 @@ public class Node {
         }
         catch (UnsupportedEncodingException ignored) {}
 
-        System.out.println(message);
+        System.out.printf(message);
     }
 
     private void hardClose() {
@@ -271,24 +271,20 @@ public class Node {
 //  Shutdown routines
 
     private void shutdownInit() {
-        System.err.println("shutdownInit()");
-
         shutdownFlag = true;
 
         if (parent.isRoot()) {
-//            System.err.println("*** ROOT ***");
+            System.err.println("*** ROOT ***");
             shutdown();
         }
 
-//        System.err.println("*** NODE ***");
+        System.err.println("*** NODE ***");
         parent.sendCapture();
         waitForCaptureLoop();
         shutdown();
     }
 
     private void waitForCaptureLoop() {
-//        System.err.println("waitForCaptureLoop()");
-
         Statement statement = () -> !parent.isRoot() && !(captureFlag && captureSet.isEmpty());
         boolean userInputAllowed = false;
         ParentRoutines parentRoutines = mainParentRoutines;
@@ -314,20 +310,24 @@ public class Node {
      *  3.  Send disconnect to the parent (and wait for response)
      */
     private void shutdown() {
-//        System.err.println("shutdown()");
         messagesLoop();  //  1
 
         connector.sendDisconnectToChildren(parent.getParentAddress());
         waitAllChildrenLoop();  //  2
 
-        if (parent.isRoot())
+        if (parent.isRoot()) {
             Runtime.getRuntime().halt(0);
+        }
 
         connector.sendDisconnectToParent();
         waitParentLoop();   //  3
 
         Runtime.getRuntime().halt(0);
     }
+
+    private Statement messageStatement;
+    private ConnectorRoutines messageConnectorRoutines;
+    private MessengerRoutines messageMessengerRoutines;
 
     private void messagesLoop() {
         Statement statement = () -> !messenger.isEmpty();
@@ -352,18 +352,33 @@ public class Node {
             handleAcceptDecline(connection, data, id);
         };
 
+        messageStatement = statement;
+        messageConnectorRoutines = connectorRoutines;
+        messageMessengerRoutines = messengerRoutines;
+
         loop(statement, userInputAllowed, parentRoutines, connectorRoutines, messengerRoutines);
     }
 
     private void waitAllChildrenLoop() {
-//        System.err.println("waitAllChildrenLoop()");
+        Statement statement = messageStatement;
+        boolean userInputAllowed = false;
+        ParentRoutines parentRoutines = null;
+        ConnectorRoutines connectorRoutines = (address, data, id) -> {
+            if (messageConnectorRoutines.run(address, data, id))
+                return true;
 
-        messagesLoop();
+            if (getType(data) == DISCONNECT && getResponse(data) == ACCEPT) {
+                connector.handleDisconnectAccept(id, neighbours.get(address));
+            }
+
+            return false;
+        };
+        MessengerRoutines messengerRoutines = messageMessengerRoutines;
+
+        loop(statement, userInputAllowed, parentRoutines, connectorRoutines, messengerRoutines);
     }
 
     private void waitParentLoop() {
-//        System.err.println("waitParentLoop()");
-
-        messagesLoop();
+        waitAllChildrenLoop();
     }
 }

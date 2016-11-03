@@ -27,4 +27,19 @@ class Connection {
     InetSocketAddress getAddress() {
         return address;
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj.getClass() != Connection.class)
+            return false;
+
+        Connection connection = (Connection) obj;
+
+        return address.equals(connection.address);
+    }
+
+    @Override
+    public int hashCode() {
+        return address.hashCode();
+    }
 }

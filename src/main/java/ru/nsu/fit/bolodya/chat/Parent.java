@@ -90,7 +90,7 @@ class Parent {
     private Message captureMessage;
 
     void updateCapture() {
-        if (captureMessage != null && neighbours.containsKey(parentAddress))
+        if (captureMessage != null && neighbours.containsKey(parentAddress) && !captureMessage.isDelivered())
             captureMessage.addConnection(neighbours.get(parentAddress));
     }
 

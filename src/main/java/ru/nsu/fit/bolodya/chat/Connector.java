@@ -56,11 +56,6 @@ class Connector {
         neighbours.get(address).send(accept(CONNECT, id));
     }
 
-    void declineConnect(UUID id, InetSocketAddress address) {
-        Connection connection = new Connection(socket, address);
-        connection.send(decline(CONNECT, id));
-    }
-
 //  DISCONNECT
 
     void acceptDisconnect(UUID id, InetSocketAddress address) {
@@ -91,6 +86,8 @@ class Connector {
             parent = neighbours.values().iterator().next();
 
         this.parent = parent;
+        if (neighbours.size() == 1)
+            return;
 
         UUID id = Message.nextID();
         byte[] data = disconnect(id, parent.getAddress());
