@@ -296,16 +296,17 @@ public class Node {
     private void shutdownInit() {
         shutdownFlag = true;
 
-        if (parent.isRoot())
-            shutdown();
+        if (!parent.isRoot())
+            parent.sendCapture();
+        else
+            captureFlag = true;
 
-        parent.sendCapture();
         waitForCaptureLoop();
         shutdown();
     }
 
     private void waitForCaptureLoop() {
-        Statement statement = () -> !parent.isRoot() && !(captureFlag && captureSet.isEmpty());
+        Statement statement = () -> !(captureFlag && captureSet.isEmpty());
         boolean userInputAllowed = false;
         ParentRoutines parentRoutines = mainParentRoutines;
         ConnectorRoutines connectorRoutines = (address, data, id) -> {

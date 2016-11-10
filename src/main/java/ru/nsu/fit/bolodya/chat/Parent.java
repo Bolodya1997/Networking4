@@ -19,7 +19,7 @@ class Parent {
     private boolean reconnecting;
     private UUID savedID;
 
-    private Runnable shutdown;
+    private Runnable setCaptureFlagRoutine;
 
     Parent(Map<InetSocketAddress, Connection> neighbours,
            Messenger messenger, Connector connector,
@@ -28,7 +28,7 @@ class Parent {
         this.messenger = messenger;
         this.connector = connector;
         this.parentAddress = parentAddress;
-        this.shutdown = setCaptureFlag;
+        this.setCaptureFlagRoutine = setCaptureFlag;
     }
 
 //  Check
@@ -91,8 +91,12 @@ class Parent {
     private Message captureMessage;
 
     void updateCapture() {
-        if (captureMessage != null && neighbours.containsKey(parentAddress) && !captureMessage.isDelivered())
-            captureMessage.addConnection(neighbours.get(parentAddress));
+        if (captureMessage != null) {
+            if (parentAddress == null)
+                setCaptureFlagRoutine.run();
+            if (neighbours.containsKey(parentAddress) && !captureMessage.isDelivered())
+                captureMessage.addConnection(neighbours.get(parentAddress));
+        }
     }
 
     void sendCapture() {
@@ -102,7 +106,7 @@ class Parent {
     }
 
     void handleCaptureAccept() {
-        shutdown.run();
+        setCaptureFlagRoutine.run();
     }
 
     InetSocketAddress getParentAddress() {

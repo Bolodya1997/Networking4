@@ -67,9 +67,11 @@ class Connector {
             connection = new Connection(socket, address);
 
         captureSet.remove(connection);
+        messenger.removeConnection(connection);
 
         connection.send(accept(DISCONNECT, id));
         neighbours.remove(address);
+
     }
 
     void handleDisconnectAccept(UUID id, Connection connection) {
