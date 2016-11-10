@@ -22,6 +22,29 @@ public class Node {
     private boolean shutdownFlag;
     private boolean captureFlag;
 
+    private String name;
+    {
+        ArrayList<String> names = new ArrayList<>();
+        names.add("Peter");
+        names.add("Svinusha");
+        names.add("Donald");
+        names.add("Serega");
+        names.add("Bolodya");
+        names.add("Losos");
+        names.add("Fedor");
+        names.add("Katyusha");
+        names.add("Grigory");
+        names.add("Daniel");
+        names.add("Len04ka");
+        names.add("Alexander");
+        names.add("Nikolay");
+        names.add("Ilyusha");
+        names.add("Nikos");
+        names.add("Jason Statehem");
+
+        name = names.get((int) (Math.random() * names.size())) + ((int) (Math.random() * 1000));
+    }
+
     static {
         try {
             "UTF8 must be supported".getBytes("UTF8");
@@ -138,7 +161,7 @@ public class Node {
         Scanner scanner = new Scanner(System.in);
         if (System.in.available() > 0) {
             try {
-                String message = String.format("%s : %s\n", socket.getLocalSocketAddress(), scanner.next());
+                String message = String.format("%s : %s\n", name, scanner.next());
                 messenger.sendMessage(message(Message.nextID(), message.getBytes("UTF8")));
             }
             catch (UnsupportedEncodingException ignored) {}
