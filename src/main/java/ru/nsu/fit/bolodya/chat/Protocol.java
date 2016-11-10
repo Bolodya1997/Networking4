@@ -8,9 +8,9 @@ import java.util.UUID;
 
 class Protocol {
 
-    private static int TYPE_LENGTH  = 1;
-    private static int ID_LENGTH    = 2 * Long.BYTES;  //  sizeof UUID
-    private static int META_LENGTH  = TYPE_LENGTH + ID_LENGTH;
+    private final static int TYPE_LENGTH  = 1;
+    private final static int ID_LENGTH    = 2 * Long.BYTES;  //  sizeof UUID
+    private final static int META_LENGTH  = TYPE_LENGTH + ID_LENGTH;
 
     static final int MAX_DATA = 1024 * 1024;
     static final int MAX_PACKET = MAX_DATA + META_LENGTH;
