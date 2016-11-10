@@ -12,6 +12,8 @@ class Message {
     private long createTime = System.currentTimeMillis();
     private long lastUpdateTime = createTime;
 
+    private boolean system;
+
     Message(byte[] data, Connection connection) {
         this.data = Arrays.copyOf(data, data.length);
         connections.add(connection);
@@ -57,6 +59,14 @@ class Message {
     boolean outOfDate() {
         long curTime = System.currentTimeMillis();
         return curTime - lastUpdateTime > MESSAGE_LIFE || curTime - createTime > MAX_MESSAGE_LIFE;
+    }
+
+    boolean isSystem() {
+        return system;
+    }
+
+    void setSystem(boolean system) {
+        this.system = system;
     }
 
     static UUID nextID() {

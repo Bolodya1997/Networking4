@@ -33,7 +33,10 @@ class Connector {
     }
 
     void declineCapture(UUID id, Connection connection) {
-        connection.send(decline(CAPTURE, id));
+        if (captureSet.contains(connection))
+            connection.send(accept(CAPTURE, id));
+        else
+            connection.send(decline(CAPTURE, id));
     }
 
 //  CONNECT

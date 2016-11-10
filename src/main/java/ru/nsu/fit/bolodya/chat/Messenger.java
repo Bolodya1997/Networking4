@@ -36,9 +36,9 @@ class Messenger {
             return;
 
         lastSendTime = curTime;
-        clearMessages();
-
         messages.values().forEach(Message::send);
+
+        clearMessages();
     }
 
     private void clearMessages() {
@@ -103,6 +103,7 @@ class Messenger {
     }
 
     void sendSystemMessage(UUID id, Message message) {
+        message.setSystem(true);
         messages.put(id, message.send());
     }
 
@@ -124,7 +125,8 @@ class Messenger {
 
     void addConnection(Connection connection) {
         for (Message message: messages.values())
-            message.addConnection(connection);
+            if (!message.isSystem() && !message.outOfDate())
+                message.addConnection(connection);
     }
 
     void removeConnection(Connection connection) {
