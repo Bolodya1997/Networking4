@@ -9,6 +9,8 @@ import static ru.nsu.fit.bolodya.chat.Protocol.*;
 
 public class Node {
 
+    private static final double lossProbality = 0.80;
+
     private DatagramSocket socket;
 
     private Map<InetSocketAddress, Connection> neighbours = new HashMap<>();
@@ -175,7 +177,7 @@ public class Node {
         catch (IOException e) {
             return true;
         }
-        return Math.random() > 0.99 || filter(receivePacket.getLength());
+        return Math.random() < lossProbality || filter(receivePacket.getLength());
     }
 
     private interface Statement {
@@ -306,7 +308,7 @@ public class Node {
     }
 
     private void waitForCaptureLoop() {
-        Statement statement = () -> !(captureFlag && captureSet.isEmpty());
+        Statement statement = () -> !captureFlag && !(parent.isRoot() && captureSet.isEmpty());
         boolean userInputAllowed = false;
         ParentRoutines parentRoutines = mainParentRoutines;
         ConnectorRoutines connectorRoutines = (address, data, id) -> {

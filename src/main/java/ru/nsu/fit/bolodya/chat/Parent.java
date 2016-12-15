@@ -57,6 +57,12 @@ class Parent {
 //  Reconnecting
 
     void handleDisconnect(byte[] data) {
+        Connection parent = neighbours.get(parentAddress);
+        if (reconnecting) {
+            parent.send(decline(DISCONNECT, savedID));
+            return;
+        }
+
         reconnecting = true;
         savedID = getID(data);
 
@@ -66,7 +72,7 @@ class Parent {
             return;
         }
 
-        neighbours.get(parentAddress).send(decline(DISCONNECT, savedID));
+        parent.send(decline(DISCONNECT, savedID));
 
         UUID id = Message.nextID();
         connector.sendConnect(id, newParentAddress);
